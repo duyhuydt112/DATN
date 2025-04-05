@@ -16,7 +16,7 @@ Author: Eduardo Nigro
 import time
 import numpy as np
 from utils import plot_line
-from gpiozero_extended import Motor, PID
+from pendubot.src.lib.gpiozero_extended import Motor, PID
 
 # Setting general parameters
 tstop = 2  # Execution duration (s)
