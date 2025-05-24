@@ -5,10 +5,12 @@
 #include <Gimbal_Position_Control.h>
 #include <iostream>
 #include <cmath>
+#include <Motor_Control.h>
 
 /* Axis Rotation */
 extern float Pan_Degree;
 extern float Tilt_Degree;
+extern float Roll_Degree;
 
 /* Define Rotation Range*/
 const float MIN_PAN = -180;
@@ -36,6 +38,7 @@ extern unsigned long prevMillis;
 extern float Azimuth_Angle;
 extern float Elevation_Angle;
 extern float Radius;
+extern float Roll_Angle;
 
 /* Define Joystick Press State */
 enum Press_State {
@@ -46,10 +49,6 @@ enum Press_State {
 
 extern bool Last_Joystick_Pressed;
 extern int Current_State;
-
-/* Set of Coordinate */
-extern std::array<float, 4> Cartesian_Position;
-extern std::array<float, 3> Axis_Rotation_Value;
 
 /* Define Control Function*/
 void Joystick_Init();

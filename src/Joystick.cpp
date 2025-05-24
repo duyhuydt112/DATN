@@ -9,10 +9,7 @@ float Roll_Degree = 0;
 float Azimuth_Angle = 0.0f;
 float Elevation_Angle = 0.0f;
 float Radius = 1.0f;
-
-/* Set of Coordinate*/
-std::array<float, 4> Cartesian_Position = {0.0f, 0.0f, 0.0f, 0.0f};
-std::array<float, 3> Axis_Rotation_Value = {0.0f, 0.0f, 0.0f};
+float Roll_Angle = 0.0f;
 
 /* Time Variables */
 unsigned long prevMillis = 0;
@@ -71,10 +68,7 @@ void Joystick_Run(){
         else {
             Azimuth_Angle = nextAngle;
         }
-
-        /* X && Y calculating */
-        Cartesian_Position[0] = Radius * sin(Azimuth_Angle);
-        Cartesian_Position[1] = Radius * cos(Azimuth_Angle);
+        Pan_Move(Azimuth_Angle);
     }
 
 
@@ -82,25 +76,15 @@ void Joystick_Run(){
     if (abs(Axis_Value[1]) > DEADZONE && Current_State == Press_State::TILT_STATE){
         float direction = (Axis_Value[1] > 0) ? 1.0f : -1.0f;
         float deltaAngle = direction * SPEED_RAD_PER_SECOND * deltaTime;
-        Cartesian_Position[2] += deltaAngle;
+        Elevation_Angle += deltaAngle;
+        Tilt_Move(Elevation_Angle);
     }
 
     if (abs(Axis_Value[0]) > DEADZONE && Current_State == Press_State::ROLL_STATE){
         float direction = (Axis_Value[0] > 0) ? 1.0f : -1.0f;
         float deltaAngle = direction * SPEED_RAD_PER_SECOND * deltaTime;
-        Cartesian_Position[3] += deltaAngle;
+        Roll_Angle += deltaAngle;
+        Roll_Move(Roll_Angle);
     }
-
-    
-    Axis_Rotation_Value = Invert_Kinematic(Cartesian_Position);
-    Pan_Degree = constrain(Axis_Rotation_Value[0] * 180.0f / PI, MIN_PAN, MAX_PAN);
-    Tilt_Degree = constrain(Axis_Rotation_Value[1] * 180.0f / PI, MIN_TILT, MAX_TILT);
-    Roll_Degree = constrain(Axis_Rotation_Value[2] * 180.0f / PI, MIN_ROLL, MAX_ROLL);
-    Serial.print("Pan_Degree: ");
-    Serial.print(Pan_Degree);
-    Serial.print(" | Tilt_Degree: ");
-    Serial.print(Tilt_Degree);
-    Serial.print(" | Roll_Degree: ");
-    Serial.println(Roll_Degree);
 }
 
