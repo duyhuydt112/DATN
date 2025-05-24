@@ -4,14 +4,35 @@
 #include <SimpleFOC.h>
 
 void Motor_Setup(){
-    Serial.begin(11500);
+    /* Encoder Object Init */
     MagneticSensorSPI Pan_Encoder = MagneticSensorSPI(AS5048_SPI, PAN_CS_PIN);
     MagneticSensorSPI Roll_Encoder = MagneticSensorSPI(AS5048_SPI, ROLL_CS_PIN);
     MagneticSensorSPI Tilt_Encoder = MagneticSensorSPI(AS5048_SPI, TILT_CS_PIN);
+
+    /* Driver Object Init */
     BLDCDriver3PWM Pan_Driver = BLDCDriver3PWM(PAN_IN1_PIN, PAN_IN2_PIN, PAN_IN2_PIN, PAN_EN_PIN);
     BLDCDriver3PWM Tilt_Driver = BLDCDriver3PWM(TILT_IN1_PIN, TILT_IN2_PIN, TILT_IN3_PIN, TILT_EN_PIN);
     BLDCDriver3PWM Roll_Driver = BLDCDriver3PWM(ROLL_IN1_PIN, ROLL_IN2_PIN, ROLL_IN3_PIN, ROLL_EN_PIN);
-    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE1));
+
+    /* Driver Attribute Config */
+    Pan_Driver.pwm_frequency = 20000;
+    Pan_Driver.voltage_power_supply = 12;
+    Pan_Driver.voltage_limit = 12;
+
+    Tilt_Driver.pwm_frequency = 20000;
+    Tilt_Driver.voltage_power_supply = 12;
+    Tilt_Driver.voltage_limit = 12;
+    
+    Roll_Driver.pwm_frequency = 20000;
+    Roll_Driver.voltage_power_supply = 12;
+    Roll_Driver.voltage_limit = 12;
+
+    /* Driver Init */
+    Roll_Driver.init();
+    Tilt_Driver.init();
+    Pan_Driver.init();
+
+    /* Encoder Init */
     Pan_Encoder.init();
     Roll_Encoder.init();
     Tilt_Encoder.init();
