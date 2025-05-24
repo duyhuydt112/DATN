@@ -43,6 +43,7 @@ void configureMotor(BLDCMotor& motor, const MotorConfig& config) {
     /* Set Limit */
     motor.voltage_limit = config.voltage_limit; // Volts - default driver.voltage_limit
     motor.current_limit = config.current_limit; // Amps - default 0.2Amps
+    motor.P_angle.output_ramp = config.output_ramp; // Rad/S^2 - Accelaration 
 }
 
 void Do_Motor(char* cmd) { 

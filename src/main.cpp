@@ -11,7 +11,8 @@ MotorConfig Pan_Config = {
     20,    // P_angle_P
     50,    // velocity_limit
     10,    // voltage_limit
-    2      // current_limit
+    2,      // current_limit
+    10000  // output_ramp
 };
 
 void setup() {

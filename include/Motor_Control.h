@@ -86,6 +86,7 @@ struct MotorConfig {
   float velocity_limit;
   float voltage_limit;
   float current_limit;
+  float output_ramp;
 };
 extern MotorConfig motorConfig;
 
