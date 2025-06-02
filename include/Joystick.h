@@ -2,7 +2,7 @@
 #define JOYSTICK_HPP
 
 #include <Arduino.h>
-#include <Gimbal_Position_Control.h>
+#include <Gimbal_High_Planner.h>
 #include <iostream>
 #include <cmath>
 #include <Motor_Control.h>
@@ -22,7 +22,7 @@ const float MAX_ROLL = 180;
 const float JOY_CENTER = 2048; 
 const int DEADZONE = 200;
 
-/* Define Pin for Joystick*/
+/* Define Pin for Joystick */
 const int VRX_PIN = 25;
 const int VRY_PIN = 33;
 const int SW_PIN = 32;
@@ -50,9 +50,13 @@ enum Press_State {
 extern bool Last_Joystick_Pressed;
 extern int Current_State;
 
+/* Move Gimbal Axis Manual */
+extern bool Manual_Mode_Flag;
+
 /* Define Control Function*/
 void Joystick_Init();
 std::array<float, 2> Joystick_Input_Processing();
 void Joystick_Run();
 void Button_State();
+void Turn_Off_Manual_Mode();
 #endif

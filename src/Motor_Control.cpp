@@ -17,9 +17,7 @@ BLDCMotor Roll_Motor = BLDCMotor(GM3506_PAIR_POLES, GM3506_KV_RATING);
 
 /* Commander via Terminal */
 Commander commander = Commander(Serial);
-std::array<bool, 3> Motor_Commander_Enable = {true, false, false};
-
-
+std::array<bool, 3> Motor_Commander_Enable = {false, false, true};
 
 void configureMotor(BLDCMotor& motor, const MotorConfig& config) {
 
@@ -58,58 +56,51 @@ void Do_Motor(char* cmd) {
     }
 }
 
+void Driver_Setup(BLDCDriver3PWM& Driver_Conf){
+    Driver_Conf.pwm_frequency = 20000;
+    Driver_Conf.voltage_power_supply = 12;
+    Driver_Conf.voltage_limit = 12;
+}
+
+void Linking_With_Motor(BLDCDriver3PWM& Driver_Conf, MagneticSensorSPI& Encoder_Conf, BLDCMotor& Motor, MotionControlType Type, bool has_Encoder){
+    Motor.linkDriver(&Driver_Conf);
+    if (has_Encoder == true)
+        Motor.linkSensor(&Encoder_Conf);
+    Motor.controller = Type;
+}
+
 void Motor_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf, const MotorConfig& Roll_Conf){
 
-    /* Driver Attribute Config */
-    Pan_Driver.pwm_frequency = 20000;
-    Pan_Driver.voltage_power_supply = 12;
-    Pan_Driver.voltage_limit = 12;
-
-    Tilt_Driver.pwm_frequency = 20000;
-    Tilt_Driver.voltage_power_supply = 12;
-    Tilt_Driver.voltage_limit = 12;
-    
-    Roll_Driver.pwm_frequency = 20000;
-    Roll_Driver.voltage_power_supply = 12;
-    Roll_Driver.voltage_limit = 12;
-
-    /* Driver Init */
-    Roll_Driver.init();
-    Tilt_Driver.init();
-    Pan_Driver.init();
-
-    /* Encoder Init */
-    Pan_Encoder.init();
-    Roll_Encoder.init();
-    Tilt_Encoder.init();
-
-    /* Link Sensor && Driver With Motor */
-    Pan_Motor.linkDriver(&Pan_Driver);
-    Pan_Motor.linkSensor(&Pan_Encoder);
-    Pan_Motor.controller = MotionControlType::angle;
-
-    Tilt_Motor.linkDriver(&Tilt_Driver);
-    Tilt_Motor.linkSensor(&Tilt_Encoder);
-    Tilt_Motor.controller = MotionControlType::angle;
-
-    Roll_Motor.linkDriver(&Roll_Driver);
-    Roll_Motor.linkSensor(&Roll_Encoder);
-    Roll_Motor.controller = MotionControlType::angle;
-
-    /* Motor Init */
-    Pan_Motor.init();
-    Tilt_Motor.init();
-    Roll_Motor.init();
-
-    /* FOC Init */
-    Pan_Motor.initFOC();
-    Tilt_Motor.initFOC();
-    Roll_Motor.init();
-
-    /* Motor Monitoring */
-    Pan_Motor.useMonitoring(Serial);
-    Tilt_Motor.useMonitoring(Serial);
-    Roll_Motor.useMonitoring(Serial);
+    if (Motor_Commander_Enable[0]) {
+        Driver_Setup(Pan_Driver);
+        Pan_Driver.init();
+        Pan_Encoder.init();
+        Linking_With_Motor(Pan_Driver, Pan_Encoder, Pan_Motor, MotionControlType::angle, true);
+        Pan_Motor.init();
+        Pan_Motor.initFOC();
+        Pan_Motor.useMonitoring(Serial);
+        configureMotor(Pan_Motor, Pan_Conf);
+    }
+    if (Motor_Commander_Enable[1]) {
+        Driver_Setup(Tilt_Driver);
+        Tilt_Driver.init();
+        Tilt_Encoder.init();
+        Linking_With_Motor(Tilt_Driver, Tilt_Encoder, Tilt_Motor, MotionControlType::angle, true);
+        Tilt_Motor.init();
+        Tilt_Motor.initFOC();
+        Tilt_Motor.useMonitoring(Serial);
+        configureMotor(Tilt_Motor, Tilt_Conf);
+    }
+    if (Motor_Commander_Enable[2]) {
+        Driver_Setup(Roll_Driver);
+        Roll_Driver.init();
+        Roll_Encoder.init();
+        Linking_With_Motor(Roll_Driver, Roll_Encoder, Roll_Motor, MotionControlType::angle, false);
+        Roll_Motor.init();
+        Roll_Motor.init();
+        Roll_Motor.useMonitoring(Serial);
+        configureMotor(Roll_Motor, Roll_Conf);
+    }
 
     /* Simple FOC Debug */
     SimpleFOCDebug::enable(&Serial);
@@ -117,16 +108,11 @@ void Motor_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf, cons
     /* Commander Init */
     commander.add('M', Do_Motor, "Terminal Commander For Motor");  
 
-    /* Config Motor */
-    configureMotor(Pan_Motor, Pan_Conf);
-    configureMotor(Tilt_Motor, Tilt_Conf);
-    configureMotor(Roll_Motor, Roll_Conf);
-
 }
 
 void FOC_Run(){
-    Pan_Motor.loopFOC();
-    Tilt_Motor.loopFOC();
+    // Pan_Motor.loopFOC();
+    // Tilt_Motor.loopFOC();
     Roll_Motor.loopFOC();
 }
 
@@ -143,13 +129,16 @@ void Roll_Move(float Roll_Move_Angle_Rad){
 }
 
 void Motor_Monitor_Run(){
-    Pan_Motor.monitor();
-    Tilt_Motor.monitor();
+    // Pan_Motor.monitor();
+    // Tilt_Motor.monitor();
     Roll_Motor.monitor();
 }
 
 void Commander_Run(){
     commander.run();
 }
+
+void Pan_Motor_Control(){}
+
 
 

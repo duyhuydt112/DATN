@@ -1,8 +1,8 @@
 #include <Joystick.h>
-#include <Gimbal_Position_Control.h>
+#include <Gimbal_High_Planner.h>
 #include <Motor_Control.h>
 
-MotorConfig Pan_Config = {
+MotorConfig Roll_Config = {
     0.0,   // initial_target
     0.2,   // PID_P
     20,    // PID_I
@@ -18,8 +18,12 @@ MotorConfig Pan_Config = {
 void setup() {
   Serial.begin(115200);
   Joystick_Init();
+  Motor_Setup(Roll_Config, Roll_Config, Roll_Config);
 }
 
 void loop() {
   Joystick_Run();
+  FOC_Run();
+  Motor_Monitor_Run();
+  Roll_Move(PI);
 }
