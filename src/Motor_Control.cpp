@@ -6,7 +6,7 @@ MagneticSensorSPI Roll_Encoder = MagneticSensorSPI(AS5048_SPI, ROLL_CS_PIN);
 MagneticSensorSPI Tilt_Encoder = MagneticSensorSPI(AS5048_SPI, TILT_CS_PIN);
 
 /* Driver Object Init */
-BLDCDriver3PWM Pan_Driver = BLDCDriver3PWM(PAN_IN1_PIN, PAN_IN2_PIN, PAN_IN2_PIN, PAN_EN_PIN);
+BLDCDriver3PWM Pan_Driver = BLDCDriver3PWM(PAN_IN1_PIN, PAN_IN2_PIN, PAN_IN3_PIN, PAN_EN_PIN);
 BLDCDriver3PWM Tilt_Driver = BLDCDriver3PWM(TILT_IN1_PIN, TILT_IN2_PIN, TILT_IN3_PIN, TILT_EN_PIN);
 BLDCDriver3PWM Roll_Driver = BLDCDriver3PWM(ROLL_IN1_PIN, ROLL_IN2_PIN, ROLL_IN3_PIN, ROLL_EN_PIN);
 
@@ -97,7 +97,7 @@ void Motor_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf, cons
         Roll_Encoder.init();
         Linking_With_Motor(Roll_Driver, Roll_Encoder, Roll_Motor, MotionControlType::angle, false);
         Roll_Motor.init();
-        Roll_Motor.init();
+        Roll_Motor.initFOC();
         Roll_Motor.useMonitoring(Serial);
         configureMotor(Roll_Motor, Roll_Conf);
     }
@@ -111,17 +111,17 @@ void Motor_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf, cons
 }
 
 void FOC_Run(){
-    // Pan_Motor.loopFOC();
-    // Tilt_Motor.loopFOC();
-    Roll_Motor.loopFOC();
+    if (Motor_Commander_Enable[0]) Pan_Motor.loopFOC();
+    if (Motor_Commander_Enable[1]) Tilt_Motor.loopFOC();
+    if (Motor_Commander_Enable[2]) Roll_Motor.loopFOC();
 }
 
 void Pan_Move(float Pan_Move_Angle_Rad){
-    Roll_Motor.move(Pan_Move_Angle_Rad);
+    Pan_Motor.move(Pan_Move_Angle_Rad);
 }
 
 void Tilt_Move(float Tilt_Move_Angle_Rad){
-    Roll_Motor.move(Tilt_Move_Angle_Rad);
+    Tilt_Motor.move(Tilt_Move_Angle_Rad);
 }
 
 void Roll_Move(float Roll_Move_Angle_Rad){
@@ -131,7 +131,7 @@ void Roll_Move(float Roll_Move_Angle_Rad){
 void Motor_Monitor_Run(){
     // Pan_Motor.monitor();
     // Tilt_Motor.monitor();
-    Roll_Motor.monitor();
+    Pan_Motor.monitor();
 }
 
 void Commander_Run(){
