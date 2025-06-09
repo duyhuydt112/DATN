@@ -57,7 +57,7 @@ void setup() {
   motor.useMonitoring(Serial);
   motor.monitor_downsample = 10;
 
-  command.add('M', onTarget, "target angle in degrees");
+  command.add('T', onTarget, "target angle in degrees");
   Serial.println(F("Motor commands sketch | Initial motion control > angle."));
 
   // Khởi tạo FOC
@@ -71,8 +71,13 @@ void loop() {
   motor.loopFOC();
 
   // Di chuyển đến góc mục tiêu định kỳ
+  if (millis() - lastMove > 50) {
+    motor.move(motor.target);
+    lastMove = millis();
+    //Serial.print("Angle: ");
+    //Serial.println(sensor.getAngle());
 
-  motor.move(motor.target);
+  }
 
   // Gửi dữ liệu theo định dạng của SimpleFOCStudio
   motor.monitor();
