@@ -11,7 +11,7 @@
 
 extern Adafruit_BNO055 BNO055;
 std::array<float, 3> Get_BNO055_BasePoint();
-std::array<float, 3> Read_Angle_ThreeAxes(float &Yaw, float &Pitch, float &Roll, std::array<float, 3> Base_Point);
+std::array<float, 3> Read_Angle_ThreeAxes(std::array<float, 3> Base_Point);
 void BNO055_Setup();
 
 #endif

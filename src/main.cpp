@@ -1,45 +1,84 @@
 #include <SimpleFOC.h>
 
-// Định nghĩa chân kết nối driver
-#define PAN_IN1_PIN 14
-#define PAN_IN2_PIN 27
-#define PAN_IN3_PIN 26
-#define PAN_EN_PIN 25
-
-// Khởi tạo motor GM4108 (11 cặp cực từ)
+// Khởi tạo động cơ với 11 cặp cực
 BLDCMotor motor = BLDCMotor(11);
 
-// Khởi tạo driver 3 PWM có chân EN
-BLDCDriver3PWM driver = BLDCDriver3PWM(PAN_IN1_PIN, PAN_IN2_PIN, PAN_IN3_PIN, PAN_EN_PIN);
+// Khởi tạo driver 3PWM
+BLDCDriver3PWM driver = BLDCDriver3PWM(14, 27, 26, 25);
+
+// Khởi tạo cảm biến từ AS5048A (SPI)
+MagneticSensorSPI sensor = MagneticSensorSPI(AS5048_SPI, 5);
+
+// Biến lưu góc mục tiêu
+float target_angle = 0;
+
+// commander interface
+Commander command = Commander(Serial);
+
+// Hàm xử lý lệnh từ SimpleFOCStudio
+void onTarget(char* cmd) {
+  float deg = atof(cmd); // Lấy số từ chuỗi
+  motor.target = deg * _PI / 180.0;  // Chuyển sang radian
+}
+
+unsigned long lastMove = 0;
 
 void setup() {
   Serial.begin(115200);
-  delay(500);  // Đợi Serial sẵn sàng
 
-  // Cấu hình driver
-  driver.voltage_power_supply = 12;  // Điện áp cấp cho motor
+  // Khởi tạo SPI cho ESP32
+  SPI.begin(18, 23, 19);  // SCK, MISO, MOSI
+  sensor.init();
+  motor.linkSensor(&sensor);
+
+  // Thiết lập điện áp nguồn cấp
+  driver.voltage_power_supply = 12;
+  driver.pwm_frequency = 20000; // Giảm tiếng ồn và tiết kiệm điện
   driver.init();
-
-  // Liên kết driver với motor
   motor.linkDriver(&driver);
 
-  // Chế độ điều khiển vòng hở theo vận tốc
-  motor.controller = MotionControlType::velocity_openloop;
+  // Chọn chế độ điều khiển góc
+  motor.controller = MotionControlType::angle;
 
-  // Giới hạn điện áp (tránh đẩy motor lên quá mạnh)
-  motor.voltage_limit = 6;  // Bạn có thể thử từ 6~8V
+  // PID điều chỉnh để tránh rung giật và quá nhiệt
+  motor.PID_velocity.P = 0.1;
+  motor.PID_velocity.I = 4.0;
+  motor.P_angle.P = 2.0;
 
-  // Khởi tạo motor
+  // Giới hạn điện áp và tốc độ
+  motor.voltage_limit = 4.0;
+  motor.velocity_limit = 3.0;
+  
+  // Bộ lọc tốc độ để giảm nhiễu
+  motor.LPF_velocity.Tf = 0.05;
+
+  // Thiết lập giám sát biến và lệnh
+  motor.monitor_variables = _MON_TARGET | _MON_ANGLE | _MON_VEL;
+  motor.useMonitoring(Serial);
+  motor.monitor_downsample = 10;
+
+  command.add('M', onTarget, "target angle in degrees");
+  Serial.println(F("Motor commands sketch | Initial motion control > angle."));
+
+  // Khởi tạo FOC
   motor.init();
-
-  // Hiển thị trạng thái
+  Serial.println("Running FOC init...");
+  motor.initFOC();
   Serial.println("Motor ready.");
 }
 
 void loop() {
-  // Di chuyển motor với vận tốc không cảm biến (rad/s)
-  motor.move(4.0);  // Tăng lên 3.0~5.0 nếu thấy yếu
+  motor.loopFOC();
 
-  // Có thể dùng delay ngắn hoặc yield() để tránh WDT reset trên ESP32
-  delay(5);  // hoặc yield();
+  // Di chuyển đến góc mục tiêu định kỳ
+
+  motor.move(motor.target);
+
+  // Gửi dữ liệu theo định dạng của SimpleFOCStudio
+  motor.monitor();
+
+  // Nhận lệnh từ giao diện Studio
+  command.run();
+
+  delay(10);  // Giảm delay để cập nhật nhanh hơn
 }

@@ -19,7 +19,9 @@ void BNO055_Setup(){
     }
 
     delay(1000);
+    BNO055.setMode(adafruit_bno055_opmode_t::OPERATION_MODE_NDOF);
     BNO055.setExtCrystalUse(true);
+
 }
 
 std::array<float, 3> Get_BNO055_BasePoint(){
@@ -31,20 +33,16 @@ std::array<float, 3> Get_BNO055_BasePoint(){
     return Base_Point;
 }
 
-std::array<float, 3> Read_Angle_ThreeAxes(float &Yaw, float &Pitch, float &Roll, std::array<float, 3> Base_Point) {
+std::array<float, 3> Read_Angle_ThreeAxes(std::array<float, 3> Base_Point) {
     std::array<float, 3> Current_Rotation;
     imu::Vector<3> euler = BNO055.getVector(Adafruit_BNO055::VECTOR_EULER);
     Current_Rotation[2] = euler.x() - Base_Point[2]; // Yaw
     Current_Rotation[1] = euler.y() - Base_Point[1]; // Pitch
     Current_Rotation[0] = euler.z() - Base_Point[0]; // Roll
 
-    Yaw = Current_Rotation[2];
-    Pitch = Current_Rotation[1];
-    Roll = Current_Rotation[0];
-
-    Serial.print("YAW: "); Serial.print(Yaw); Serial.print(" | ");
-    Serial.print("PITCH: "); Serial.print(Pitch); Serial.print(" | ");
-    Serial.print("ROLL: "); Serial.println(Roll);
+    Serial.print("YAW: "); Serial.print(Current_Rotation[2]); Serial.print(" | ");
+    Serial.print("PITCH: "); Serial.print(Current_Rotation[1]); Serial.print(" | ");
+    Serial.print("ROLL: "); Serial.println(Current_Rotation[0]);
 
     return Current_Rotation;
 }
