@@ -11,31 +11,31 @@
 
 // SPI cho các driver
 #define PAN_CS_PIN   5
-#define TILT_CS_PIN  15
-#define ROLL_CS_PIN  0
+#define TILT_CS_PIN  17
+#define ROLL_CS_PIN  16
 #define MOSI         19
 #define MISO         23
 #define CLK          18
 
 /* Power For Driver */
-#define PAN_EN_PIN  25
-#define TILT_EN_PIN 17
-#define ROLL_EN_PIN 0
-#define GND_PIN     0
+#define PAN_EN_PIN  26
+#define TILT_EN_PIN 13
+#define ROLL_EN_PIN 4
+#define GND_PIN     00000000000000
 
 /* Driver Pan */
-#define PAN_IN1_PIN  14
-#define PAN_IN2_PIN  27
-#define PAN_IN3_PIN  26
+#define PAN_IN1_PIN  12
+#define PAN_IN2_PIN  14
+#define PAN_IN3_PIN  27
 
 /* Driver Tilt */
-#define TILT_IN1_PIN 4
-#define TILT_IN2_PIN 13
-#define TILT_IN3_PIN 16
+#define TILT_IN1_PIN 25
+#define TILT_IN2_PIN 33
+#define TILT_IN3_PIN 32
 
 /* Driver ROLL */
-#define ROLL_IN1_PIN 0
-#define ROLL_IN2_PIN 0
+#define ROLL_IN1_PIN 15
+#define ROLL_IN2_PIN 2
 #define ROLL_IN3_PIN 0
 
 /* Define Parameter For Motor */
@@ -90,7 +90,7 @@ struct MotorConfig {
   float PID_I = 0.2;
   float PID_D = 0.02;
   float Velocity_limit = 100;
-  float Monitor_Variables = _MON_TARGET | _MON_ANGLE | _MON_VEL;
+  int Monitor_Variables = _MON_TARGET | _MON_ANGLE | _MON_VEL;
   float Monitor_Downsample = 10;
   float Voltage_limit;
   // float Current_limit;
