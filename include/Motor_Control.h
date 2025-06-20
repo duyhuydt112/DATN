@@ -81,17 +81,17 @@ extern BLDCMotor Roll_Motor;
 
 /* Commander via Terminal */
 extern Commander commander;
-extern std::array<bool, 3> Motor_Commander_Enable;
+extern std::array<bool, 3> Motor_Enable;
 
 /* Motor Motion Parameter Config */
 struct MotorConfig {
   float Initial_target;
-  float PID_P = 5.0;
-  float PID_I = 0.2;
-  float PID_D = 0.02;
-  float Velocity_limit = 100;
-  int Monitor_Variables = _MON_TARGET | _MON_ANGLE | _MON_VEL;
-  float Monitor_Downsample = 10;
+  float PID_P;
+  float PID_I;
+  float PID_D;
+  float Velocity_limit;
+  int Monitor_Variables;
+  int Monitor_Downsample;
   float Voltage_limit;
   // float Current_limit;
   // float LPF_Tf = 0.15;
@@ -116,6 +116,7 @@ struct DriverConfig {
   float Voltage_Limit = 6;
   float Pwm_Frequency = 20000;
 };
+
 
 /* Global Variables */
 extern bool Has_Pan_Angle_Target = false;
@@ -146,7 +147,7 @@ void on_Roll_Target(char* cmd);
 /*--------------------------------------------------------------------RUN FUNCTION-------------------------------------------------------------- */
 /*----------------------------------------------------------------------------------------------------------------------------------------------- */
 
-void PID_Run(unsigned int Last_Time,  const MotorConfig& Motor);
+void PID_Run(const MotorConfig& motorConfig, MagneticSensorSPI& sensor, PID_Calculate& PID, bool& Has_Angle_Target, float& Target_Angle);
 void Motors_Move(float Pan_Move_Angle_Rad, float Tilt_Move_Angle_Rad, float Roll_Move_Angle_Rad);
 void Motor_Monitor_Run();
 void Commander_Run();

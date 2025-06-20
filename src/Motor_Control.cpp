@@ -21,7 +21,7 @@ BLDCMotor Roll_Motor = BLDCMotor(GM3506_PAIR_POLES, GM3506_KV_RATING);
 
 /* Commander via Terminal */
 Commander commander = Commander(Serial);
-std::array<bool, 3> Motor_Commander_Enable = {false, false, true};
+std::array<bool, 3> Motor_Enable = {false, false, true};
 
 /* Global Variables */
 bool Has_Pan_Angle_Target = false;
@@ -89,7 +89,7 @@ void Linking_With_Motor(BLDCDriver3PWM& Driver_Conf, MagneticSensorSPI& Encoder_
 
 void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf, const MotorConfig& Roll_Conf, const DriverConfig& Driver){
 
-    if (Motor_Commander_Enable[0]) {
+    if (Motor_Enable[0]) {
         Configure_Driver(Driver, Pan_Driver);
         Pan_Driver.init();
         Pan_Encoder.init();
@@ -99,7 +99,7 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
         Pan_Motor.initFOC();
         Pan_Motor.useMonitoring(Serial);
     }
-    if (Motor_Commander_Enable[1]) {
+    if (Motor_Enable[1]) {
         Configure_Driver(Driver, Tilt_Driver);
         Tilt_Driver.init();
         Tilt_Encoder.init();
@@ -109,7 +109,7 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
         Tilt_Motor.initFOC();
         Tilt_Motor.useMonitoring(Serial);
     }
-    if (Motor_Commander_Enable[2]) {
+    if (Motor_Enable[2]) {
         Configure_Driver(Driver, Roll_Driver);
         Roll_Driver.init();
         Roll_Encoder.init();
@@ -159,43 +159,43 @@ void PID_Run(const MotorConfig& motorConfig, MagneticSensorSPI& sensor, PID_Calc
 }
 
 void FOC_Run(){
-    if (Motor_Commander_Enable[0]){
+    if (Motor_Enable[0]){
         Pan_Motor.loopFOC();
     }
 
-    if (Motor_Commander_Enable[1]){
+    if (Motor_Enable[1]){
         Tilt_Motor.loopFOC();
     }
 
-    if (Motor_Commander_Enable[2]){
+    if (Motor_Enable[2]){
         Roll_Motor.loopFOC();
     }
 }
 
 void Motor_Move(float Pan_Move_Angle_Degree, float Tilt_Move_Angle_Degree, float Roll_Move_Angle_Degree){
-    if (Motor_Commander_Enable[0]){
+    if (Motor_Enable[0]){
         Pan_Motor.move(Pan_Move_Angle_Degree);
     }
 
-    if (Motor_Commander_Enable[1]){
+    if (Motor_Enable[1]){
         Tilt_Motor.move(Tilt_Move_Angle_Degree);
     }
 
-    if (Motor_Commander_Enable[2]){
+    if (Motor_Enable[2]){
         Roll_Motor.move(Roll_Move_Angle_Degree);
     }
 }
 
 void Motor_Monitor_Run(){
-    if (Motor_Commander_Enable[0]){
+    if (Motor_Enable[0]){
         Pan_Motor.monitor();
     }
 
-    if (Motor_Commander_Enable[1]){
+    if (Motor_Enable[1]){
         Tilt_Motor.monitor();
     }
 
-    if (Motor_Commander_Enable[2]){
+    if (Motor_Enable[2]){
         Roll_Motor.monitor();
     }
 }
