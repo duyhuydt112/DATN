@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <SimpleFOC.h>
+#include <PD_Fuzzy.h>
 
 /*----------------------------------------------------------------------------------------------------------------------------------------------- */
 /*--------------------------------------------------------------------PIN_INIT-------------------------------------------------------------- */
@@ -94,7 +95,7 @@ struct MotorConfig {
   int Monitor_Downsample;
   float Voltage_limit;
   // float Current_limit;
-  // float LPF_Tf = 0.15;
+  float Velocity_LPF_Tf;
   // float P_angle_P;
   // float Output_Ramp;
 };
@@ -119,12 +120,12 @@ struct DriverConfig {
 
 
 /* Global Variables */
-extern bool Has_Pan_Angle_Target = false;
-extern bool Has_Tilt_Angle_Target = false;
-extern bool Has_Roll_Angle_Target = false;
-extern float Pan_Target_Angle = 0;
-extern float Tilt_Target_Angle = 0;
-extern float Roll_Target_Angle = 0;
+extern bool Has_Pan_Angle_Target;
+extern bool Has_Tilt_Angle_Target;
+extern bool Has_Roll_Angle_Target;
+extern float Pan_Target_Angle;
+extern float Tilt_Target_Angle;
+extern float Roll_Target_Angle;
 
 /*----------------------------------------------------------------------------------------------------------------------------------------------- */
 /*--------------------------------------------------------------------Configure-------------------------------------------------------------- */
@@ -133,7 +134,7 @@ extern float Roll_Target_Angle = 0;
 void Configure_Motor(BLDCMotor& motor, const MotorConfig& config);
 void Configure_Driver(const DriverConfig& config, BLDCDriver3PWM& driver);
 void Linking_With_Motor(BLDCDriver3PWM& Driver_Conf, MagneticSensorSPI& Encoder_Conf, BLDCMotor& Motor);
-void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf, const MotorConfig& Roll_Conf);
+void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf, const MotorConfig& Roll_Conf, const DriverConfig& Driver);
 
 /*----------------------------------------------------------------------------------------------------------------------------------------------- */
 /*--------------------------------------------------------------------Serial Commander-------------------------------------------------------------- */

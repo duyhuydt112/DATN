@@ -73,9 +73,11 @@ void Configure_Motor(BLDCMotor& motor, const MotorConfig& motorConfig, const Dri
 
     // motor.current_limit = config.Current_limit; // Amps - default 0.2Amps
     motor.voltage_limit = driverConfig.Voltage_Limit; // Volts - default driver.voltage_limit
+    MAX_FUZZY_INPUT_ERROR = driverConfig.Voltage_Limit;
+    MAX_FUZZY_OUTPUT_CONTROL_VOLTAGE = driverConfig.Voltage_Limit;
     motor.velocity_limit = motorConfig.Velocity_limit;
     motor.monitor_variables = motorConfig.Monitor_Variables;
-    motor.monitor_downsample = motorConfig.Monitor_Downsample;
+    motor.LPF_velocity = motorConfig.Velocity_LPF_Tf;
     motor.monitor_downsample = motorConfig.Monitor_Downsample;
     motor.controller = MotionControlType::torque;
     motor.torque_controller = TorqueControlType::voltage;
@@ -95,9 +97,13 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
         Pan_Encoder.init();
         Linking_With_Motor(Pan_Driver, Pan_Encoder, Pan_Motor);
         Configure_Motor(Pan_Motor, Pan_Conf, Driver);
+        Pan_Motor.useMonitoring(Serial);
         Pan_Motor.init();
         Pan_Motor.initFOC();
-        Pan_Motor.useMonitoring(Serial);
+        Serial.print("Pan Initial angle: ");
+        Pan_Target_Angle = Pan_Encoder.getAngle();
+        Serial.println(Pan_Target_Angle, 4);
+        
     }
     if (Motor_Enable[1]) {
         Configure_Driver(Driver, Tilt_Driver);
@@ -105,9 +111,13 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
         Tilt_Encoder.init();
         Linking_With_Motor(Tilt_Driver, Tilt_Encoder, Tilt_Motor);
         Configure_Motor(Tilt_Motor, Tilt_Conf, Driver);
+        Tilt_Motor.useMonitoring(Serial);
         Tilt_Motor.init();
         Tilt_Motor.initFOC();
-        Tilt_Motor.useMonitoring(Serial);
+
+        Serial.print("Tilt Initial angle: ");
+        Tilt_Target_Angle = Tilt_Encoder.getAngle();
+        Serial.println(Tilt_Target_Angle, 4);
     }
     if (Motor_Enable[2]) {
         Configure_Driver(Driver, Roll_Driver);
@@ -115,9 +125,12 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
         Roll_Encoder.init();
         Linking_With_Motor(Roll_Driver, Roll_Encoder, Roll_Motor);
         Configure_Motor(Roll_Motor, Roll_Conf, Driver);
-        Roll_Motor.init();
-        Roll_Motor.init();
         Roll_Motor.useMonitoring(Serial);
+        Roll_Motor.init();
+        Roll_Motor.init();
+        Serial.print("Roll Initial angle: ");
+        Roll_Target_Angle = Roll_Encoder.getAngle();
+        Serial.println(Roll_Target_Angle, 4);
     }
 
     /* Simple FOC Debug */
@@ -126,7 +139,10 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
     /* Commander Init */
     commander.add('P', on_Pan_Angle_Target, "Terminal Commander For Pan Motor");
     commander.add('T', on_Tilt_Angle_Target, "Terminal Commander For Tilt Motor");  
-    commander.add('R', on_Roll_Target, "Terminal Commander For Roll Motor");    
+    commander.add('R', on_Roll_Angle_Target, "Terminal Commander For Roll Motor");    
+    Serial.println("Motor ready.");
+    Serial.println("Send command");
+
 
 }
 
@@ -145,7 +161,7 @@ void PID_Run(const MotorConfig& motorConfig, MagneticSensorSPI& sensor, PID_Calc
     PID.Error_Integral += PID.Error * (PID.Delta_Time  / 1000.0);
     PID.Error_Integral = constrain(PID.Error_Integral, -1.0, 1.0); 
     PID.Error_Derivative = (PID.Error - PID.Error_Prev) / (PID.Delta_Time / 1000.0);
-
+    
     PID.Torque_cmd = motorConfig.PID_P * PID.Error + motorConfig.PID_I * PID.Error_Integral + motorConfig.PID_D * PID.Error_Derivative;
     PID.Torque_cmd = constrain(PID.Torque_cmd, -motorConfig.Voltage_limit, motorConfig.Voltage_limit);
 
