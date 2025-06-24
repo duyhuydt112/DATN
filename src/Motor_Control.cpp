@@ -151,9 +151,9 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
 /*----------------------------------------------------------------------------------------------------------------------------------------------- */
 
 
-void PID_Run(const MotorConfig& motorConfig, MagneticSensorSPI& sensor, PID_Calculate& PID, bool& Has_Angle_Target, float& Target_Angle){
+void PID_Run(const MotorConfig& motorConfig, MagneticSensorSPI& sensor, PID_Calculate& PID, bool& Has_Angle_Target, float& Target_Angle, BLDCMotor& Motor){
     if ((millis() - PID.Last_Time) >= PID.Delta_Time && Has_Angle_Target) {
-    float Current_angle = sensor.getAngle();     
+    float Current_angle = Motor.shaft_angle - sensor.getAngle();     
     PID.Error = Target_Angle - Current_angle;
 
     if (abs(PID.Error) < 0.01) PID.Error = 0;
@@ -191,14 +191,17 @@ void FOC_Run(){
 void Motor_Move(float Pan_Move_Angle_Degree, float Tilt_Move_Angle_Degree, float Roll_Move_Angle_Degree){
     if (Motor_Enable[0]){
         Pan_Motor.move(Pan_Move_Angle_Degree);
+        delay(2000);
     }
 
     if (Motor_Enable[1]){
         Tilt_Motor.move(Tilt_Move_Angle_Degree);
+        delay(2000);
     }
 
     if (Motor_Enable[2]){
         Roll_Motor.move(Roll_Move_Angle_Degree);
+        delay(2000);
     }
 }
 

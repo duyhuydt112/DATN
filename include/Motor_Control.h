@@ -131,7 +131,7 @@ extern float Roll_Target_Angle;
 /*--------------------------------------------------------------------Configure-------------------------------------------------------------- */
 /*----------------------------------------------------------------------------------------------------------------------------------------------- */
 
-void Configure_Motor(BLDCMotor& motor, const MotorConfig& config);
+void Configure_Motor(BLDCMotor& motor, const MotorConfig& motorConfig, const DriverConfig& driverConfig);
 void Configure_Driver(const DriverConfig& config, BLDCDriver3PWM& driver);
 void Linking_With_Motor(BLDCDriver3PWM& Driver_Conf, MagneticSensorSPI& Encoder_Conf, BLDCMotor& Motor);
 void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf, const MotorConfig& Roll_Conf, const DriverConfig& Driver);
@@ -148,7 +148,7 @@ void on_Roll_Target(char* cmd);
 /*--------------------------------------------------------------------RUN FUNCTION-------------------------------------------------------------- */
 /*----------------------------------------------------------------------------------------------------------------------------------------------- */
 
-void PID_Run(const MotorConfig& motorConfig, MagneticSensorSPI& sensor, PID_Calculate& PID, bool& Has_Angle_Target, float& Target_Angle);
+void PID_Run(const MotorConfig& motorConfig, MagneticSensorSPI& sensor, PID_Calculate& PID, bool& Has_Angle_Target, float& Target_Angle, BLDCMotor& Motor);
 void Motors_Move(float Pan_Move_Angle_Rad, float Tilt_Move_Angle_Rad, float Roll_Move_Angle_Rad);
 void Motor_Monitor_Run();
 void Commander_Run();
