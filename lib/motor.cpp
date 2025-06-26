@@ -84,55 +84,43 @@ void Configure_Driver(const DriverConfig& config, BLDCDriver3PWM& driver) {
   driver.pwm_frequency = config.Pwm_Frequency;
 }
 
-void Configure_Motor(BLDCMotor& motor, const MotorConfig& motorConfig, const DriverConfig& driverConfig, const CurrentPID& pid) {
+void Configure_Motor(BLDCMotor& motor, const MotorConfig& motorConfig, const DriverConfig& driverConfig) {
+
+    /* Low Pass Filter For Velocity */
+
+    // motor.LPF_velocity.Tf = config.LPF_Tf;
+
+    /* Set Limit */
 
     // motor.current_limit = config.Current_limit; // Amps - default 0.2Amps
     motor.voltage_limit = driverConfig.Voltage_Limit; // Volts - default driver.voltage_limit
-    motor.current_limit = motorConfig.Current_limit;
     MAX_FUZZY_INPUT_ERROR = driverConfig.Voltage_Limit;
     MAX_FUZZY_OUTPUT_CONTROL_VOLTAGE = driverConfig.Voltage_Limit;
-
-    // motor.LPF_velocity = motorConfig.Velocity_LPF_Tf;
-    // motor.velocity_limit = motorConfig.Velocity_limit;
+    motor.velocity_limit = motorConfig.Velocity_limit;
     motor.monitor_variables = motorConfig.Monitor_Variables;
+    motor.LPF_velocity = motorConfig.Velocity_LPF_Tf;
     motor.monitor_downsample = motorConfig.Monitor_Downsample;
     motor.controller = MotionControlType::torque;
-    motor.torque_controller = TorqueControlType::foc_current;
-
-    motor.PID_current_q.P = pid.P_Current_q;
-    motor.PID_current_q.I = pid.I_Current_q;
-    motor.PID_current_q.D = pid.D_Current_q;
-    motor.PID_current_q.output_ramp = pid.Output_Ramp_Current_q;
-    motor.LPF_current_q.Tf = pid.Tf_LPF_Current_q;
-
-    motor.PID_current_d.P = pid.P_Current_d;
-    motor.PID_current_d.I = pid.I_Current_d;
-    motor.PID_current_d.D = pid.D_Current_d;
-    motor.PID_current_d.output_ramp = pid.Output_Ramp_Current_d;
-    motor.LPF_current_d.Tf = pid.Tf_LPF_Current_d;
-    // motor.voltage_sensor_align
+    motor.torque_controller = TorqueControlType::voltage;
 }
 
 
-void Linking_With_Motor(BLDCDriver3PWM& Driver_Conf, MagneticSensorSPI& Encoder_Conf, BLDCMotor& Motor, InlineCurrentSense& Current_Sense){
+void Linking_With_Motor(BLDCDriver3PWM& Driver_Conf, MagneticSensorSPI& Encoder_Conf, BLDCMotor& Motor){
     Motor.linkDriver(&Driver_Conf);
     Motor.linkSensor(&Encoder_Conf);
-    Motor.linkCurrentSense(&Current_Sense);
 }
 
-void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf, const MotorConfig& Roll_Conf, const DriverConfig& Driver, const CurrentPID& Pan_Curr_Conf, const CurrentPID& Tilt_Curr_Conf, const CurrentPID& Roll_Curr_Conf){
+void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf, const MotorConfig& Roll_Conf, const DriverConfig& Driver){
 
     if (Motor_Enable[0]) {
         Configure_Driver(Driver, Pan_Driver);
         Pan_Driver.init();
         Pan_Encoder.init();
-        Pan_Current_Sensor.linkDriver(&Pan_Driver);
-        Pan_Current_Sensor.init();
-        Linking_With_Motor(Pan_Driver, Pan_Encoder, Pan_Motor, Pan_Current_Sensor);
-        Configure_Motor(Pan_Motor, Pan_Conf, Driver, Pan_Curr_Conf);
+        Linking_With_Motor(Pan_Driver, Pan_Encoder, Pan_Motor);
+        Configure_Motor(Pan_Motor, Pan_Conf, Driver);
         Pan_Motor.useMonitoring(Serial);
         Pan_Motor.init();
-        Pan_Motor.initFOC(0, Direction::CW);
+        Pan_Motor.initFOC();
         Serial.print("Pan Initial angle: ");
         Pan_Target_Angle = Pan_Encoder.getAngle();
         Serial.println(Pan_Target_Angle, 4);
@@ -142,13 +130,12 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
         Configure_Driver(Driver, Tilt_Driver);
         Tilt_Driver.init();
         Tilt_Encoder.init();
-        Tilt_Current_Sensor.linkDriver(&Tilt_Driver);
-        Tilt_Current_Sensor.init();
-        Linking_With_Motor(Tilt_Driver, Tilt_Encoder, Tilt_Motor, Tilt_Current_Sensor);
-        Configure_Motor(Tilt_Motor, Tilt_Conf, Driver, Tilt_Curr_Conf);
+        Linking_With_Motor(Tilt_Driver, Tilt_Encoder, Tilt_Motor);
+        Configure_Motor(Tilt_Motor, Tilt_Conf, Driver);
         Tilt_Motor.useMonitoring(Serial);
         Tilt_Motor.init();
-        Tilt_Motor.initFOC(0, Direction::CW);
+        Tilt_Motor.initFOC();
+
         Serial.print("Tilt Initial angle: ");
         Tilt_Target_Angle = Tilt_Encoder.getAngle();
         Serial.println(Tilt_Target_Angle, 4);
@@ -157,13 +144,11 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
         Configure_Driver(Driver, Roll_Driver);
         Roll_Driver.init();
         Roll_Encoder.init();
-        Roll_Current_Sensor.linkDriver(&Roll_Driver);
-        Roll_Current_Sensor.init();
-        Linking_With_Motor(Roll_Driver, Roll_Encoder, Roll_Motor, Roll_Current_Sensor);
-        Configure_Motor(Roll_Motor, Roll_Conf, Driver, Roll_Curr_Conf);
+        Linking_With_Motor(Roll_Driver, Roll_Encoder, Roll_Motor);
+        Configure_Motor(Roll_Motor, Roll_Conf, Driver);
         Roll_Motor.useMonitoring(Serial);
         Roll_Motor.init();
-        Roll_Motor.initFOC(0, Direction::CW);
+        Roll_Motor.init();
         Serial.print("Roll Initial angle: ");
         Roll_Target_Angle = Roll_Encoder.getAngle();
         Serial.println(Roll_Target_Angle, 4);
@@ -173,11 +158,12 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
     SimpleFOCDebug::enable(&Serial);
 
     /* Commander Init */
-    commander.add('P', on_Pan_Current_Target, "Terminal Commander For Pan Motor");
-    commander.add('T', on_Tilt_Current_Target, "Terminal Commander For Tilt Motor");  
-    commander.add('R', on_Roll_Current_Target, "Terminal Commander For Roll Motor");    
+    commander.add('P', on_Pan_Angle_Target, "Terminal Commander For Pan Motor");
+    commander.add('T', on_Tilt_Angle_Target, "Terminal Commander For Tilt Motor");  
+    commander.add('R', on_Roll_Angle_Target, "Terminal Commander For Roll Motor");    
     Serial.println("Motor ready.");
     Serial.println("Send command");
+
 
 }
 
@@ -226,17 +212,17 @@ void FOC_Run(){
 void Motor_Move(float Pan_Move_Angle_Degree, float Tilt_Move_Angle_Degree, float Roll_Move_Angle_Degree){
     if (Motor_Enable[0]){
         Pan_Motor.move(Pan_Move_Angle_Degree);
-        delay(10);
+        delay(2000);
     }
 
     if (Motor_Enable[1]){
         Tilt_Motor.move(Tilt_Move_Angle_Degree);
-        delay(10);
+        delay(2000);
     }
 
     if (Motor_Enable[2]){
         Roll_Motor.move(Roll_Move_Angle_Degree);
-        delay(10);
+        delay(2000);
     }
 }
 

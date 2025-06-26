@@ -99,15 +99,13 @@ void setup() {
   Serial.begin(115200);
   delay(500);
   SPI.begin(CLK, MISO, MOSI);
-  Motor_Enable = {false, true, true};
+  Motor_Enable = {false, true, false};
   Controller_Setup(Pan_Config, Tilt_Config, Roll_Config, Driver_Config ,Pan_Current_PID, Tilt_Current_PID, Roll_Current_PID);
 }
 
 void loop() {
     FOC_Run();
     Motor_Move(Pan_Target_Current, Tilt_Target_Current, Roll_Target_Current);
-    Motor_Monitor_Run();
     Commander_Run();
-    Serial.println(Roll_Current_Sensor.getDCCurrent(), 4);
     delay(1);
 }
