@@ -53,8 +53,8 @@
     /* PAN */
 #define PAN_R_SHUNT 0.1f
 #define PAN_INA_GAIN 50.0f
-#define PAN_CURRENT_SENSOR_A0 32
-#define PAN_CURRENT_SENSOR_A1 33
+#define PAN_CURRENT_SENSOR_A0 33
+#define PAN_CURRENT_SENSOR_A1 32
 
 /* Define Parameter For Motor */
     /* GM3506 */

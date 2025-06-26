@@ -10,7 +10,7 @@ MagneticSensorSPI Tilt_Encoder = MagneticSensorSPI(AS5048_SPI, TILT_CS_PIN);
 MagneticSensorSPI Roll_Encoder = MagneticSensorSPI(AS5048_SPI, ROLL_CS_PIN);
 
 /* Driver Object Init */
-BLDCDriver3PWM Pan_Driver = BLDCDriver3PWM(PAN_IN1_PIN, PAN_IN2_PIN, PAN_IN2_PIN, PAN_EN_PIN);
+BLDCDriver3PWM Pan_Driver = BLDCDriver3PWM(PAN_IN1_PIN, PAN_IN2_PIN, PAN_IN3_PIN, PAN_EN_PIN);
 BLDCDriver3PWM Tilt_Driver = BLDCDriver3PWM(TILT_IN1_PIN, TILT_IN2_PIN, TILT_IN3_PIN, TILT_EN_PIN);
 BLDCDriver3PWM Roll_Driver = BLDCDriver3PWM(ROLL_IN1_PIN, ROLL_IN2_PIN, ROLL_IN3_PIN, ROLL_EN_PIN);
 
@@ -101,16 +101,16 @@ void Configure_Motor(BLDCMotor& motor, const MotorConfig& motorConfig, const Dri
 
     motor.PID_current_q.P = pid.P_Current_q;
     motor.PID_current_q.I = pid.I_Current_q;
-    motor.PID_current_q.D = pid.D_Current_q;
+    motor.PID_current_q.D = pid.I_Current_q;
     motor.PID_current_q.output_ramp = pid.Output_Ramp_Current_q;
     motor.LPF_current_q.Tf = pid.Tf_LPF_Current_q;
 
     motor.PID_current_d.P = pid.P_Current_d;
-    motor.PID_current_d.I = pid.I_Current_d;
-    motor.PID_current_d.D = pid.D_Current_d;
+    motor.PID_current_d.I = pid.P_Current_d;
+    motor.PID_current_d.D = pid.P_Current_d;
     motor.PID_current_d.output_ramp = pid.Output_Ramp_Current_d;
     motor.LPF_current_d.Tf = pid.Tf_LPF_Current_d;
-    // motor.voltage_sensor_align
+    // motor.voltage_sensor_align = 3.0;
 }
 
 
@@ -127,6 +127,8 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
         Pan_Driver.init();
         Pan_Encoder.init();
         Pan_Current_Sensor.linkDriver(&Pan_Driver);
+        Pan_Current_Sensor.gain_b *=-1; // if b in inverted
+        // Pan_Current_Sensor.gain_a *=-1; // if b in inverted
         Pan_Current_Sensor.init();
         Linking_With_Motor(Pan_Driver, Pan_Encoder, Pan_Motor, Pan_Current_Sensor);
         Configure_Motor(Pan_Motor, Pan_Conf, Driver, Pan_Curr_Conf);
@@ -178,6 +180,7 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
     commander.add('R', on_Roll_Current_Target, "Terminal Commander For Roll Motor");    
     Serial.println("Motor ready.");
     Serial.println("Send command");
+
 
 }
 
@@ -257,7 +260,3 @@ void Motor_Monitor_Run(){
 void Commander_Run(){
     commander.run();
 }
-
-
-
-
