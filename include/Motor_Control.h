@@ -42,9 +42,9 @@
 /* Current Sense */
     /* ROLL */
 #define ROLL_R_SHUNT 0.1f
-#define ROLL_INA_GAIN 100.0f
-#define ROLL_CURRENT_SENSOR_A0 36
-#define ROLL_CURRENT_SENSOR_A1 39
+#define ROLL_INA_GAIN 50.0f
+#define ROLL_CURRENT_SENSOR_A0 32
+#define ROLL_CURRENT_SENSOR_A1 33
     /* TILT */
 #define TILT_R_SHUNT 0.02f
 #define TILT_INA_GAIN 50.0f
@@ -53,8 +53,8 @@
     /* PAN */
 #define PAN_R_SHUNT 0.1f
 #define PAN_INA_GAIN 50.0f
-#define PAN_CURRENT_SENSOR_A0 33
-#define PAN_CURRENT_SENSOR_A1 32
+#define PAN_CURRENT_SENSOR_A0 36
+#define PAN_CURRENT_SENSOR_A1 39
 
 /* Define Parameter For Motor */
     /* GM3506 */

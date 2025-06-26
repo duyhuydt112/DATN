@@ -41,18 +41,19 @@ MotorConfig Roll_Config = {
 DriverConfig Driver_Config;
 
 CurrentPID Pan_Current_PID = {
-    5.0f,   // q_P
-    5.0f,   // q_I
-    0.0f,   // q_D
-    10.0f,  // q_Output_Ramp
-    0.01f,  // q_tf
+    3.0f,  // q_P
+    1.0f,  // q_I
+    0.0f,  // q_D
+    10.0f, // q_Output_Ramp
+    0.02f, // q_tf
 
-    5.0f,   // d_P
-    5.0f,   // d_I
-    0.0f,   // d_D
-    10.0f,  // d_Output_Ramp
-    0.01f,  // d_tf
+    2.0f,  // d_P
+    1.0f,  // d_I
+    0.0f,  // d_D
+    10.0f, // d_Output_Ramp
+    0.02f  // d_tf
 };
+
 
 CurrentPID Tilt_Current_PID = {
     5.0f,   // q_P

@@ -110,7 +110,7 @@ void Configure_Motor(BLDCMotor& motor, const MotorConfig& motorConfig, const Dri
     motor.PID_current_d.D = pid.P_Current_d;
     motor.PID_current_d.output_ramp = pid.Output_Ramp_Current_d;
     motor.LPF_current_d.Tf = pid.Tf_LPF_Current_d;
-    // motor.voltage_sensor_align = 3.0;
+    motor.voltage_sensor_align = 2.5;
 }
 
 
@@ -122,24 +122,38 @@ void Linking_With_Motor(BLDCDriver3PWM& Driver_Conf, MagneticSensorSPI& Encoder_
 
 void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf, const MotorConfig& Roll_Conf, const DriverConfig& Driver, const CurrentPID& Pan_Curr_Conf, const CurrentPID& Tilt_Curr_Conf, const CurrentPID& Roll_Curr_Conf){
 
-    if (Motor_Enable[0]) {
-        Configure_Driver(Driver, Pan_Driver);
-        Pan_Driver.init();
-        Pan_Encoder.init();
-        Pan_Current_Sensor.linkDriver(&Pan_Driver);
-        Pan_Current_Sensor.gain_b *=-1; // if b in inverted
-        // Pan_Current_Sensor.gain_a *=-1; // if b in inverted
-        Pan_Current_Sensor.init();
-        Linking_With_Motor(Pan_Driver, Pan_Encoder, Pan_Motor, Pan_Current_Sensor);
-        Configure_Motor(Pan_Motor, Pan_Conf, Driver, Pan_Curr_Conf);
-        Pan_Motor.useMonitoring(Serial);
-        Pan_Motor.init();
-        Pan_Motor.initFOC(0, Direction::CW);
-        Serial.print("Pan Initial angle: ");
-        Pan_Target_Angle = Pan_Encoder.getAngle();
-        Serial.println(Pan_Target_Angle, 4);
-        
-    }
+if (Motor_Enable[0]) {
+    Configure_Driver(Driver, Pan_Driver);
+    Pan_Driver.init();
+    Pan_Encoder.init();
+    Pan_Current_Sensor.linkDriver(&Pan_Driver);
+    // Pan_Current_Sensor.gain_b *=-1; // if b inverted
+    // Pan_Current_Sensor.gain_a *=-1;
+    // Pan_Current_Sensor.skip_align = true;
+    Pan_Current_Sensor.init();
+    // ---- In dòng align thử ngay sau khi init current sense ----
+    Serial.println(">>> Start printing current during Align (Phase A active)");
+    Pan_Driver.setPwm(1.0f, 0.0f, 0.0f); // bật pha A
+    delay(1000);
+    int align_result = Pan_Current_Sensor.driverAlign(Pan_Motor.voltage_sensor_align);
+    Serial.print("Align result: ");
+    Serial.println(align_result);
+  
+    Pan_Driver.setPwm(0, 0, 0);
+    Serial.println(">>> Done printing Align currents");
+
+    // ---- Tiếp tục khởi tạo như bình thường ----
+    Linking_With_Motor(Pan_Driver, Pan_Encoder, Pan_Motor, Pan_Current_Sensor);
+    Configure_Motor(Pan_Motor, Pan_Conf, Driver, Pan_Curr_Conf);
+    Pan_Motor.useMonitoring(Serial);
+    Pan_Motor.init();
+    Pan_Motor.initFOC(0, Direction::CW);
+    
+    Serial.print("Pan Initial angle: ");
+    Pan_Target_Angle = Pan_Encoder.getAngle();
+    Serial.println(Pan_Target_Angle, 4);
+}
+
     if (Motor_Enable[1]) {
         Configure_Driver(Driver, Tilt_Driver);
         Tilt_Driver.init();
