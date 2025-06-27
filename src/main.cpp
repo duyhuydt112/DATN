@@ -1,76 +1,106 @@
 #include <SimpleFOC.h>
-#include <Motor_Control.h>
 
-/*----------------------------------------------------------------------------------------------------------------------------------------------- */
-/*--------------------------------------------------------------------CONFIGURE-------------------------------------------------------------- */
-/*----------------------------------------------------------------------------------------------------------------------------------------------- */
+// ------------------- Khai báo phần cứng -------------------
+BLDCMotor motor = BLDCMotor(11);
+BLDCDriver3PWM driver = BLDCDriver3PWM(26, 22, 21, 25);
+MagneticSensorSPI sensor = MagneticSensorSPI(AS5048_SPI, 17); // CS2
 
-MotorConfig Pan_Config = {
-    0.0f,   // initial_target
-    6.0f,   // PID_P
-    0.2f,    // PID_I
-    0.01f,     // PID_D
-    10.0f,    // velocity_limit
-    _MON_TARGET | _MON_ANGLE | _MON_VEL,
-    10,    // downsample
-    10.0f,
-    0.05f
-};
+// ------------------- Biến PID tùy chỉnh -------------------
+float target_angle = 0;          // Góc mục tiêu (rad)
+float error = 0;
+float error_integral = 0;
+float error_derivative = 0;
+float torque_cmd = 0;
+float angle_offset = 0.0;
+float P = 1.5;
+float I = 0.1;
+float D = 0.02;
 
-MotorConfig Tilt_Config = {
-    0.0f,   // initial_target
-    5.0f,   // PID_P
-    0.2f,    // PID_I
-    0.01f,     // PID_D
-    10.0f,    // velocity_limit
-    _MON_TARGET | _MON_ANGLE | _MON_VEL,
-    10,    // downsample
-    8.0f,
-    0.15f
-};
+unsigned long t1 = 0;
+const int Dt = 10;         // thời gian cập nhật PID (ms)
 
-MotorConfig Roll_Config = {
-    0.0f,   // initial_target
-    2.0f,   // PID_P
-    0.2f,    // PID_I
-    0.01f,     // PID_D
-    10.0f,    // velocity_limit
-    _MON_TARGET | _MON_ANGLE | _MON_VEL,
-    10,    // downsample
-    10.0f,
-    0.15f
-};
-
-DriverConfig Driver_Config;
-
-PID_Calculate Pan_PID;
-PID_Calculate Tilt_PID;
-PID_Calculate Roll_PID;
-
-/*----------------------------------------------------------------------------------------------------------------------------------------------- */
-/*                                                                    SETUP                                                                       */
-/*----------------------------------------------------------------------------------------------------------------------------------------------- */
+// ------------------- Giao tiếp Serial -------------------
+Commander command = Commander(Serial);
+void onTarget(char* cmd) {
+  target_angle = atof(cmd) * _PI / 180.0; // nhập bằng độ, chuyển sang rad
+}
 
 void setup() {
   Serial.begin(115200);
   delay(500);
-  SPI.begin(CLK, MISO, MOSI);
-  Motor_Enable = {true, false, false}; //PAN, PITCH, ROLL
-  Controller_Setup(Pan_Config, Tilt_Config, Roll_Config, Driver_Config);
+
+  // Khởi tạo SPI cho ESP32: SCK, MISO, MOSI
+  SPI.begin(18, 23, 19);
+  sensor.init();
+  motor.linkSensor(&sensor);
+
+  // Driver cấu hình
+  driver.voltage_power_supply = 12;
+  driver.voltage_limit = 6;         // giới hạn torque
+  driver.pwm_frequency = 20000;
+  driver.init();
+  motor.linkDriver(&driver);
+
+  // Dùng chế độ điều khiển torque
+  motor.controller = MotionControlType::torque;
+  motor.torque_controller = TorqueControlType::voltage;
+
+  // Giới hạn tốc độ không cần thiết, nhưng vẫn đặt
+  motor.velocity_limit = 100;
+
+  // Bộ lọc tốc độ nếu cần dùng D hoặc velocity PID
+  motor.LPF_velocity.Tf = 0.05;
+
+  // Monitoring
+  motor.monitor_variables = _MON_TARGET | _MON_ANGLE | _MON_VEL;
+  motor.useMonitoring(Serial);
+  motor.monitor_downsample = 10;
+
+  command.add('T', onTarget, "target angle in degrees");
+
+  // Khởi tạo FOC
+  motor.init();
+  motor.initFOC();
+  angle_offset = sensor.getAngle();
+  target_angle = 0;
   Serial.println("Motor ready.");
   Serial.println("Send command T{angle_deg} e.g. T90");
-  Pan_Target_Angle = 0.0;
-  Tilt_Target_Angle = 0.0;
-  Roll_Target_Angle = 0.0;
+
+  t1 = millis();
 }
 
 void loop() {
-  PID_Run(Pan_Config, Pan_Encoder, Pan_PID, Has_Pan_Angle_Target, Pan_Target_Angle, Pan_Motor);
-  PID_Run(Tilt_Config, Tilt_Encoder, Tilt_PID, Has_Tilt_Angle_Target, Tilt_Target_Angle, Tilt_Motor);
-  PID_Run(Roll_Config, Roll_Encoder, Roll_PID, Has_Roll_Angle_Target, Roll_Target_Angle, Roll_Motor);
-  FOC_Run();           
-  Motor_Move(Pan_PID.Torque_cmd, Tilt_PID.Torque_cmd, Roll_PID.Torque_cmd);
-  Motor_Monitor_Run();
-  Commander_Run();              
-  delay(5);
+  // PID position loop thủ công
+  if ((millis() - t1) >= Dt) {
+    float current_angle = motor.shaft_angle - angle_offset;
+    error = target_angle - current_angle;
+
+    // Deadzone nếu sai số nhỏ
+    if (abs(error) < 0.01) error = 0;
+
+    // PID terms
+    error_integral += error * (Dt / 1000.0);
+    error_integral = constrain(error_integral, -1.0, 1.0); // anti-windup
+
+    // Khâu D dùng tốc độ đã lọc
+    error_derivative = -motor.shaftVelocity();  // ✅ Đúng
+    error_derivative = constrain(error_derivative, -1.0, 1.0); // anti
+
+    // PID output = Torque
+    torque_cmd = P * error + I * error_integral + D * error_derivative;
+    torque_cmd = constrain(torque_cmd, -motor.voltage_limit, motor.voltage_limit);
+
+    t1 = millis();
+
+    // In debug
+    Serial.print("Err: "); Serial.print(error, 4);
+    Serial.print(" | Torque: "); Serial.print(torque_cmd, 4);
+    Serial.print(" | Angle: "); Serial.println(current_angle, 4);
+  }
+
+  motor.loopFOC();            // Cập nhật từ cảm biến
+  motor.move(torque_cmd);     // Gửi lệnh torque
+  motor.monitor();
+  command.run();              // Đọc lệnh từ Serial
+  delay(10);
 }

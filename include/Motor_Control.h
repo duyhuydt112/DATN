@@ -19,20 +19,20 @@
 #define CLK          18
 
 /* Power For Driver */
-#define PAN_EN_PIN  26
-#define TILT_EN_PIN 13
+#define PAN_EN_PIN  27
+#define TILT_EN_PIN 25
 #define ROLL_EN_PIN 4
 #define GND_PIN     00000000000000
 
 /* Driver Pan */
-#define PAN_IN1_PIN  12
-#define PAN_IN2_PIN  14
-#define PAN_IN3_PIN  27
+#define PAN_IN1_PIN  13
+#define PAN_IN2_PIN  12
+#define PAN_IN3_PIN  14
 
 /* Driver Tilt */
-#define TILT_IN1_PIN 25
-#define TILT_IN2_PIN 33
-#define TILT_IN3_PIN 32
+#define TILT_IN1_PIN 26
+#define TILT_IN2_PIN 22
+#define TILT_IN3_PIN 21
 
 /* Driver ROLL */
 #define ROLL_IN1_PIN 15

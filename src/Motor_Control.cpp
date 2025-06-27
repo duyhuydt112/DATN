@@ -5,12 +5,12 @@
 /*----------------------------------------------------------------------------------------------------------------------------------------------- */
 
 /* Encoder Object Init */
-MagneticSensorSPI Pan_Encoder = MagneticSensorSPI(AS5048_SPI, PAN_CS_PIN);
+MagneticSensorSPI Pan_Encoder = MagneticSensorSPI(AS5048_SPI, TILT_CS_PIN);
 MagneticSensorSPI Tilt_Encoder = MagneticSensorSPI(AS5048_SPI, TILT_CS_PIN);
 MagneticSensorSPI Roll_Encoder = MagneticSensorSPI(AS5048_SPI, ROLL_CS_PIN);
 
 /* Driver Object Init */
-BLDCDriver3PWM Pan_Driver = BLDCDriver3PWM(PAN_IN1_PIN, PAN_IN2_PIN, PAN_IN2_PIN, PAN_EN_PIN);
+BLDCDriver3PWM Pan_Driver = BLDCDriver3PWM(PAN_IN1_PIN, PAN_IN2_PIN, PAN_IN3_PIN, PAN_EN_PIN);
 BLDCDriver3PWM Tilt_Driver = BLDCDriver3PWM(TILT_IN1_PIN, TILT_IN2_PIN, TILT_IN3_PIN, TILT_EN_PIN);
 BLDCDriver3PWM Roll_Driver = BLDCDriver3PWM(ROLL_IN1_PIN, ROLL_IN2_PIN, ROLL_IN3_PIN, ROLL_EN_PIN);
 
@@ -21,12 +21,12 @@ BLDCMotor Roll_Motor = BLDCMotor(GM3506_PAIR_POLES, GM3506_KV_RATING);
 
 /* Commander via Terminal */
 Commander commander = Commander(Serial);
-std::array<bool, 3> Motor_Enable = {false, false, true};
+std::array<bool, 3> Motor_Enable = {true, true, true};
 
 /* Global Variables */
-bool Has_Pan_Angle_Target = false;
-bool Has_Tilt_Angle_Target = false;
-bool Has_Roll_Angle_Target = false;
+bool Has_Pan_Angle_Target = true;
+bool Has_Tilt_Angle_Target = true;
+bool Has_Roll_Angle_Target = true;
 float Pan_Target_Angle = 0;
 float Tilt_Target_Angle = 0;
 float Roll_Target_Angle = 0;
@@ -101,8 +101,8 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
         Pan_Motor.init();
         Pan_Motor.initFOC();
         Serial.print("Pan Initial angle: ");
-        Pan_Target_Angle = Pan_Encoder.getAngle();
-        Serial.println(Pan_Target_Angle, 4);
+        //Pan_Target_Angle = Pan_Encoder.getAngle();
+        //Serial.println(Pan_Target_Angle, 4);
         
     }
     if (Motor_Enable[1]) {
@@ -116,8 +116,8 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
         Tilt_Motor.initFOC();
 
         Serial.print("Tilt Initial angle: ");
-        Tilt_Target_Angle = Tilt_Encoder.getAngle();
-        Serial.println(Tilt_Target_Angle, 4);
+        //Tilt_Target_Angle = Tilt_Encoder.getAngle();
+        //Serial.println(Tilt_Target_Angle, 4);
     }
     if (Motor_Enable[2]) {
         Configure_Driver(Driver, Roll_Driver);
@@ -129,8 +129,8 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
         Roll_Motor.init();
         Roll_Motor.init();
         Serial.print("Roll Initial angle: ");
-        Roll_Target_Angle = Roll_Encoder.getAngle();
-        Serial.println(Roll_Target_Angle, 4);
+        //Roll_Target_Angle = Roll_Encoder.getAngle();
+        //Serial.println(Roll_Target_Angle, 4);
     }
 
     /* Simple FOC Debug */
@@ -170,7 +170,7 @@ void PID_Run(const MotorConfig& motorConfig, MagneticSensorSPI& sensor, PID_Calc
 
     Serial.print("Err: "); Serial.print(PID.Error, 4);
     Serial.print(" | Torque: "); Serial.print(PID.Torque_cmd, 4);
-    Serial.print(" | Angle: "); Serial.println(Current_angle, 4);
+    Serial.print(" | Angle: "); Serial.println(sensor.getAngle(), 4);
   }
 }
 
@@ -191,17 +191,17 @@ void FOC_Run(){
 void Motor_Move(float Pan_Move_Angle_Degree, float Tilt_Move_Angle_Degree, float Roll_Move_Angle_Degree){
     if (Motor_Enable[0]){
         Pan_Motor.move(Pan_Move_Angle_Degree);
-        delay(2000);
+        delay(2);
     }
 
     if (Motor_Enable[1]){
         Tilt_Motor.move(Tilt_Move_Angle_Degree);
-        delay(2000);
+        delay(2);
     }
 
     if (Motor_Enable[2]){
         Roll_Motor.move(Roll_Move_Angle_Degree);
-        delay(2000);
+        delay(2);
     }
 }
 
