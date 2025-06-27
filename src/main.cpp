@@ -1,113 +1,59 @@
 #include <SimpleFOC.h>
-#include <Motor_Control.h>
+#include <SPI.h>
+// Motor + driver
+BLDCMotor motor = BLDCMotor(11);
+BLDCDriver3PWM driver = BLDCDriver3PWM(26,22,21,25);
+MagneticSensorSPI sensor = MagneticSensorSPI(AS5048_SPI, 17);
 
-/*----------------------------------------------------------------------------------------------------------------------------------------------- */
-/*--------------------------------------------------------------------CONFIGURE-------------------------------------------------------------- */
-/*----------------------------------------------------------------------------------------------------------------------------------------------- */
+// INA240-like qua InlineCurrentSense
+InlineCurrentSense current_sense = InlineCurrentSense(0.05f, 50.0f, 36, 39);
 
-MotorConfig Pan_Config = {
-    0.0f,   // initial_target
-    0.0f,   // PID_P
-    0.0f,    // PID_I
-    0.0f,     // PID_D
-    _MON_TARGET | _MON_CURR_Q | _MON_CURR_D | _MON_VEL | _MON_ANGLE ,
-    10,    // downsample
-    10.0f, // voltage_limit
-    4.0f   // current_limit
-};
+// Torque điều khiển
+float target_torque = 0.0;
+Commander command = Commander(Serial);
+void onTorque(char* buf){ target_torque = atof(buf); }
 
-MotorConfig Tilt_Config = {
-    0.0f,   // initial_target
-    0.0f,   // PID_P
-    0.0f,    // PID_I
-    0.0f,     // PID_D
-    _MON_TARGET | _MON_CURR_Q | _MON_CURR_D | _MON_VEL | _MON_ANGLE ,
-    10,    // downsample
-    10.0f, // voltage_limit
-    4.0f   // current_limit
-};
-
-MotorConfig Roll_Config = {
-    0.0f,   // initial_target
-    0.0f,   // PID_P
-    0.0f,    // PID_I
-    0.0f,     // PID_D
-    _MON_TARGET | _MON_CURR_Q | _MON_CURR_D | _MON_VEL | _MON_ANGLE ,
-    10,    // downsample
-    10.0f, // voltage_limit
-    4.0f   // current_limit
-};
-
-DriverConfig Driver_Config;
-
-CurrentPID Pan_Current_PID = {
-    3.0f,  // q_P
-    1.0f,  // q_I
-    0.0f,  // q_D
-    10.0f, // q_Output_Ramp
-    0.02f, // q_tf
-
-    2.0f,  // d_P
-    1.0f,  // d_I
-    0.0f,  // d_D
-    10.0f, // d_Output_Ramp
-    0.02f  // d_tf
-};
-
-
-CurrentPID Tilt_Current_PID = {
-    5.0f,   // q_P
-    5.0f,   // q_I
-    0.0f,   // q_D
-    10.0f,  // q_Output_Ramp
-    0.01f,  // q_tf
-
-    5.0f,   // d_P
-    5.0f,   // d_I
-    0.0f,   // d_D
-    10.0f,  // d_Output_Ramp
-    0.01f,  // d_tf
-};
-
-
-CurrentPID Roll_Current_PID = {
-    5.0f,   // q_P
-    5.0f,   // q_I
-    0.0f,   // q_D
-    10.0f,  // q_Output_Ramp
-    0.01f,  // q_tf
-
-    5.0f,   // d_P
-    5.0f,   // d_I
-    0.0f,   // d_D
-    10.0f,  // d_Output_Ramp
-    0.01f,  // d_tf
-};
-
-
-/*----------------------------------------------------------------------------------------------------------------------------------------------- */
-/*                                                                    SETUP                                                                       */
-/*----------------------------------------------------------------------------------------------------------------------------------------------- */
-
-bool Roll_Initialized = false;
-bool Tilt_Initialized = false;
-bool Pan_Initialized  = false;
-
-// ------------------------- TÁCH RIÊNG SETUP TỪNG MOTOR (TORQUE/VOLTAGE CONTROL) -------------------------
-
-
-void setup() {
+void setup(){
   Serial.begin(115200);
-  delay(500);
-  SPI.begin(CLK, MISO, MOSI);
-  Motor_Enable = {true, false, false};
-  Controller_Setup(Pan_Config, Tilt_Config, Roll_Config, Driver_Config ,Pan_Current_PID, Tilt_Current_PID, Roll_Current_PID);
+  SPI.begin(18,23,19);
+  sensor.init(); motor.linkSensor(&sensor);
+
+  driver.voltage_power_supply = 12;
+  driver.voltage_limit = 5.2;
+  driver.pwm_frequency = 20000;
+  driver.init(); motor.linkDriver(&driver);
+
+  current_sense.init();
+  current_sense.linkDriver(&driver);
+  motor.linkCurrentSense(&current_sense);
+
+  motor.torque_controller = TorqueControlType::foc_current;
+  motor.controller = MotionControlType::torque;
+  motor.foc_modulation = FOCModulationType::SinePWM;
+  motor.voltage_sensor_align = 3;
+  motor.PID_current_q.P = 2.0;
+  motor.PID_current_q.I = 10.0;
+  motor.PID_current_q.D = 0.001;
+  motor.LPF_current_q.Tf = 0.01;
+  motor.PID_current_d.P = 1.0;
+  motor.PID_current_d.I = 5.0;
+  motor.PID_current_d.D = 0.001;
+  motor.LPF_current_d.Tf = 0.01;
+  int align_result = current_sense.driverAlign(motor.voltage_sensor_align);
+  Serial.print("Align result: ");
+  Serial.println(align_result);
+  motor.monitor_variables = _MON_TARGET | _MON_CURR_Q | _MON_ANGLE;
+  motor.useMonitoring(Serial); motor.monitor_downsample = 10;
+
+  motor.init(); motor.initFOC();
+
+  command.add('T', onTorque, "target torque (voltage)");
+  Serial.println("Nhập T 0.5 để đặt torque");
 }
 
-void loop() {
-    FOC_Run();
-    Motor_Move(Pan_Target_Current, Tilt_Target_Current, Roll_Target_Current);
-    Motor_Monitor_Run();
-    Commander_Run();
-    delay(1);
+void loop(){
+  motor.loopFOC();
+  motor.move(target_torque);
+  motor.monitor();
+  command.run();
 }
