@@ -1,106 +1,97 @@
 #include <SimpleFOC.h>
+#include <SPI.h>
+#include <Motor_Control.h>
 
-// ------------------- Khai báo phần cứng -------------------
+// ------------------- Cấu hình phần cứng -------------------
 BLDCMotor motor = BLDCMotor(11);
-BLDCDriver3PWM driver = BLDCDriver3PWM(26, 22, 21, 25);
-MagneticSensorSPI sensor = MagneticSensorSPI(AS5048_SPI, 17); // CS2
+BLDCDriver3PWM driver = BLDCDriver3PWM(TILT_IN1_PIN, TILT_IN2_PIN, TILT_IN3_PIN, TILT_EN_PIN);
+MagneticSensorSPI sensor = MagneticSensorSPI(AS5048_SPI, TILT_CS_PIN);
 
-// ------------------- Biến PID tùy chỉnh -------------------
-float target_angle = 0;          // Góc mục tiêu (rad)
-float error = 0;
-float error_integral = 0;
-float error_derivative = 0;
-float torque_cmd = 0;
-float angle_offset = 0.0;
-float P = 1.5;
-float I = 0.1;
-float D = 0.02;
+// INA240A2 → Gain = 50V/V, Shunt = 0.01Ω → đo 2 pha
+InlineCurrentSense current_sense = InlineCurrentSense(TILT_R_SHUNT, TILT_INA_GAIN, PAN_CURRENT_SENSOR_A0, PAN_CURRENT_SENSOR_A1);
 
-unsigned long t1 = 0;
-const int Dt = 10;         // thời gian cập nhật PID (ms)
+// ------------------- Biến điều khiển vị trí bằng torque -------------------
+float target_angle = 0.0;      // rad
+float torque_cmd = 0.0;
 
-// ------------------- Giao tiếp Serial -------------------
+// PID vị trí ngoài (angle → torque)
+float angle_P = 7.0;
+float angle_I = 0.7;
+float angle_D = 0.18;
+float angle_error = 0, prev_error = 0, integral_error = 0;
+const float Dt = 0.002;  // thời gian mẫu (2ms)
+
+// ------------------- Commander -------------------
 Commander command = Commander(Serial);
-void onTarget(char* cmd) {
-  target_angle = atof(cmd) * _PI / 180.0; // nhập bằng độ, chuyển sang rad
+void onAngle(char* buf){ 
+  target_angle = atof(buf) * _PI / 180.0;  // nhập độ → rad
 }
 
-void setup() {
+void setup(){
   Serial.begin(115200);
-  delay(500);
-
-  // Khởi tạo SPI cho ESP32: SCK, MISO, MOSI
   SPI.begin(18, 23, 19);
-  sensor.init();
-  motor.linkSensor(&sensor);
+  sensor.init(); motor.linkSensor(&sensor);
 
-  // Driver cấu hình
   driver.voltage_power_supply = 12;
-  driver.voltage_limit = 6;         // giới hạn torque
+  driver.voltage_limit = 6.0;
   driver.pwm_frequency = 20000;
-  driver.init();
-  motor.linkDriver(&driver);
+  driver.init(); motor.linkDriver(&driver);
 
-  // Dùng chế độ điều khiển torque
+  if (!current_sense.init()) Serial.println("⚠️ INA240 init FAILED!");
+  current_sense.linkDriver(&driver);
+  motor.linkCurrentSense(&current_sense);
+  //current_sense.skip_align = true;
+  //current_sense.gain_b *= -1;
+
+  motor.torque_controller = TorqueControlType::foc_current;
   motor.controller = MotionControlType::torque;
-  motor.torque_controller = TorqueControlType::voltage;
 
-  // Giới hạn tốc độ không cần thiết, nhưng vẫn đặt
-  motor.velocity_limit = 100;
+  // PID dòng Q (torque)
+  motor.PID_current_q.P = 5.0;
+  motor.PID_current_q.I = 1.0;
+  motor.PID_current_q.D = 0.000;
+  motor.LPF_current_q.Tf = 0.06;
 
-  // Bộ lọc tốc độ nếu cần dùng D hoặc velocity PID
-  motor.LPF_velocity.Tf = 0.05;
+  // PID dòng D
+  motor.PID_current_d.P = 5.0;
+  motor.PID_current_d.I = 1.0;
+  motor.PID_current_d.D = 0.0;
+  motor.LPF_current_d.Tf = 0.06;
 
-  // Monitoring
-  motor.monitor_variables = _MON_TARGET | _MON_ANGLE | _MON_VEL;
+  // FOC modulation mượt hơn
+  motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
+  motor.voltage_sensor_align = 3.0;
+
+  // Theo dõi thông số
+  motor.monitor_variables = _MON_TARGET | _MON_CURR_Q | _MON_ANGLE | _MON_VEL;
   motor.useMonitoring(Serial);
-  motor.monitor_downsample = 10;
 
-  command.add('T', onTarget, "target angle in degrees");
-
-  // Khởi tạo FOC
   motor.init();
   motor.initFOC();
-  angle_offset = sensor.getAngle();
-  target_angle = 0;
-  Serial.println("Motor ready.");
-  Serial.println("Send command T{angle_deg} e.g. T90");
 
-  t1 = millis();
+  command.add('A', onAngle, "target angle in degrees");
+  Serial.println("✅ Điều khiển vị trí bằng torque sẵn sàng!");
+  Serial.println("➡ Gõ A 90 để quay đến góc 90 độ");
 }
 
-void loop() {
-  // PID position loop thủ công
-  if ((millis() - t1) >= Dt) {
-    float current_angle = motor.shaft_angle - angle_offset;
-    error = target_angle - current_angle;
+void loop(){
+  motor.loopFOC();
 
-    // Deadzone nếu sai số nhỏ
-    if (abs(error) < 0.01) error = 0;
+  // PID góc → torque
+  angle_error = target_angle - motor.shaft_angle;
+  integral_error += angle_error * Dt;
 
-    // PID terms
-    error_integral += error * (Dt / 1000.0);
-    error_integral = constrain(error_integral, -1.0, 1.0); // anti-windup
+  // ⚠️ Chống windup
+  integral_error = constrain(integral_error, -1.0, 1.0);
 
-    // Khâu D dùng tốc độ đã lọc
-    error_derivative = -motor.shaftVelocity();  // ✅ Đúng
-    error_derivative = constrain(error_derivative, -1.0, 1.0); // anti
+  float derivative = (angle_error - prev_error) / Dt;
+  prev_error = angle_error;
 
-    // PID output = Torque
-    torque_cmd = P * error + I * error_integral + D * error_derivative;
-    torque_cmd = constrain(torque_cmd, -motor.voltage_limit, motor.voltage_limit);
+  torque_cmd = angle_P * angle_error + angle_I * integral_error + angle_D * derivative;
+  torque_cmd = constrain(torque_cmd, -motor.voltage_limit, motor.voltage_limit);
 
-    t1 = millis();
-
-    // In debug
-    Serial.print("Err: "); Serial.print(error, 4);
-    Serial.print(" | Torque: "); Serial.print(torque_cmd, 4);
-    Serial.print(" | Angle: "); Serial.println(current_angle, 4);
-  }
-
-  motor.loopFOC();            // Cập nhật từ cảm biến
-  motor.move(torque_cmd);     // Gửi lệnh torque
+  motor.move(torque_cmd);
+  command.run();
   motor.monitor();
-  command.run();              // Đọc lệnh từ Serial
-  delay(10);
+  delay(1);
 }
