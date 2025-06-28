@@ -22,7 +22,7 @@
 #define PAN_EN_PIN  27
 #define TILT_EN_PIN 25
 #define ROLL_EN_PIN 4
-#define GND_PIN     00000000000000
+#define GND_PIN     0
 
 /* Driver Pan */
 #define PAN_IN1_PIN  13
@@ -39,6 +39,23 @@
 #define ROLL_IN2_PIN 2
 #define ROLL_IN3_PIN 0
 
+/* Current Sense */
+    /* ROLL */
+#define ROLL_R_SHUNT 0.1f
+#define ROLL_INA_GAIN 50.0f
+#define ROLL_CURRENT_SENSOR_A0 32
+#define ROLL_CURRENT_SENSOR_A1 33
+    /* TILT */
+#define TILT_R_SHUNT 0.02f
+#define TILT_INA_GAIN 50.0f
+#define TILT_CURRENT_SENSOR_A0 34
+#define TILT_CURRENT_SENSOR_A1 35
+    /* PAN */
+#define PAN_R_SHUNT 0.1f
+#define PAN_INA_GAIN 50.0f
+#define PAN_CURRENT_SENSOR_A0 36
+#define PAN_CURRENT_SENSOR_A1 39
+
 /* Define Parameter For Motor */
     /* GM3506 */
 #define GM3506_PAIR_POLES 11
@@ -48,18 +65,7 @@
 #define GM4108_PAIR_POLES 11
 #define GM4108_KV_RATING 45
 
-// /* Module Joystick */
-// #define JOYSTICK_X_PIN    36  // ADC input only
-// #define JOYSTICK_Y_PIN    39  // ADC input only
-// #define JOYSTICK_BTN_PIN  33  // Digital input
 
-// /* MPU9250 - I2C */
-// #define MPU9250_SDA_PIN   32
-// #define MPU9250_SCL_PIN   34  // Input only, vẫn dùng được I2C
-
-// /* Nút bấm riêng */
-// #define BUTTON1_PIN       35  // Input only digital
-// #define BUTTON2_PIN       3   // RX0 - dùng nếu không dùng UART0
 
 /*----------------------------------------------------------------------------------------------------------------------------------------------- */
 /*--------------------------------------------------------------------VARIABLES-------------------------------------------------------------- */
@@ -80,6 +86,10 @@ extern BLDCMotor Pan_Motor;
 extern BLDCMotor Tilt_Motor;
 extern BLDCMotor Roll_Motor;
 
+extern InlineCurrentSense Roll_Current_Sensor;
+extern InlineCurrentSense Tilt_Current_Sensor;
+extern InlineCurrentSense Pan_Current_Sensor;
+
 /* Commander via Terminal */
 extern Commander commander;
 extern std::array<bool, 3> Motor_Enable;
@@ -90,12 +100,12 @@ struct MotorConfig {
   float PID_P;
   float PID_I;
   float PID_D;
-  float Velocity_limit;
   int Monitor_Variables;
   int Monitor_Downsample;
   float Voltage_limit;
-  // float Current_limit;
-  float Velocity_LPF_Tf;
+  float Current_limit;
+  //float Velocity_limit;
+  // float Velocity_LPF_Tf;
   // float P_angle_P;
   // float Output_Ramp;
 };
@@ -118,6 +128,21 @@ struct DriverConfig {
   float Pwm_Frequency = 20000;
 };
 
+/* Current Sense PID Config */
+struct CurrentPID {
+  float P_Current_q;
+  float I_Current_q;
+  float D_Current_q;
+  float Output_Ramp_Current_q;
+  float Tf_LPF_Current_q;
+
+  float P_Current_d;
+  float I_Current_d;
+  float D_Current_d;
+  float Output_Ramp_Current_d;
+  float Tf_LPF_Current_d;
+};
+
 
 /* Global Variables */
 extern bool Has_Pan_Angle_Target;
@@ -126,6 +151,9 @@ extern bool Has_Roll_Angle_Target;
 extern float Pan_Target_Angle;
 extern float Tilt_Target_Angle;
 extern float Roll_Target_Angle;
+extern float Pan_Target_Current;
+extern float Tilt_Target_Current;
+extern float Roll_Target_Current;
 
 /*----------------------------------------------------------------------------------------------------------------------------------------------- */
 /*--------------------------------------------------------------------Configure-------------------------------------------------------------- */
@@ -133,8 +161,8 @@ extern float Roll_Target_Angle;
 
 void Configure_Motor(BLDCMotor& motor, const MotorConfig& motorConfig, const DriverConfig& driverConfig);
 void Configure_Driver(const DriverConfig& config, BLDCDriver3PWM& driver);
-void Linking_With_Motor(BLDCDriver3PWM& Driver_Conf, MagneticSensorSPI& Encoder_Conf, BLDCMotor& Motor);
-void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf, const MotorConfig& Roll_Conf, const DriverConfig& Driver);
+void Linking_With_Motor(BLDCDriver3PWM& Driver_Conf, MagneticSensorSPI& Encoder_Conf, BLDCMotor& Motor, InlineCurrentSense& Current_Sense);
+void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf, const MotorConfig& Roll_Conf, const DriverConfig& Driver, const CurrentPID& Pan_Curr_Conf, const CurrentPID& Tilt_Curr_Conf, const CurrentPID& Roll_Curr_Conf);
 
 /*----------------------------------------------------------------------------------------------------------------------------------------------- */
 /*--------------------------------------------------------------------Serial Commander-------------------------------------------------------------- */
@@ -143,6 +171,9 @@ void Controller_Setup(const MotorConfig& Pan_Conf, const MotorConfig& Tilt_Conf,
 void on_Pan_Angle_Target(char* cmd);
 void on_Tilt_Angle_Target(char* cmd);
 void on_Roll_Target(char* cmd);
+void on_Pan_Current_Target(char* cmd);
+void on_Tilt_Current_Target(char* cmd);
+void on_Roll_Current_Target(char* cmd);
 
 /*----------------------------------------------------------------------------------------------------------------------------------------------- */
 /*--------------------------------------------------------------------RUN FUNCTION-------------------------------------------------------------- */

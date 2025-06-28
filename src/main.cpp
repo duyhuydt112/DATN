@@ -40,8 +40,8 @@ void setup(){
   if (!current_sense.init()) Serial.println("⚠️ INA240 init FAILED!");
   current_sense.linkDriver(&driver);
   motor.linkCurrentSense(&current_sense);
-  //current_sense.skip_align = true;
-  //current_sense.gain_b *= -1;
+  current_sense.skip_align = true;
+  current_sense.gain_b *= -1;
 
   motor.torque_controller = TorqueControlType::foc_current;
   motor.controller = MotionControlType::torque;
@@ -75,20 +75,42 @@ void setup(){
 }
 
 void loop(){
-  motor.loopFOC();
+motor.loopFOC();
 
-  // PID góc → torque
-  angle_error = target_angle - motor.shaft_angle;
+// ==== PID góc → torque ====
+float deadzone = 0.01;  // rad ≈ 0.57 độ
+
+// 1. Tính sai số góc [-PI, PI]
+float angle_error = target_angle - motor.shaft_angle;
+angle_error = fmod(angle_error + _PI, _2PI);
+if (angle_error < 0) angle_error += _2PI;
+angle_error -= _PI;
+
+// 2. Deadzone - bỏ qua lỗi nhỏ
+if (abs(angle_error) < deadzone) {
+  angle_error = 0;
+}
+
+// 3. Tích phân (nếu không trong deadzone)
+if (angle_error != 0) {
   integral_error += angle_error * Dt;
+  integral_error = constrain(integral_error, -1.0, 1.0);  // chống windup
+}
 
-  // ⚠️ Chống windup
-  integral_error = constrain(integral_error, -1.0, 1.0);
+// 4. Đạo hàm có lọc đơn giản
+float raw_derivative = (angle_error - prev_error) / Dt;
+float derivative = 0.9 * derivative + 0.1 * raw_derivative;  // lọc đạo hàm
+prev_error = angle_error;
 
-  float derivative = (angle_error - prev_error) / Dt;
-  prev_error = angle_error;
+// 5. PID output
+float torque_cmd = angle_P * angle_error + angle_I * integral_error + angle_D * derivative;
+torque_cmd = constrain(torque_cmd, -motor.voltage_limit, motor.voltage_limit);
 
-  torque_cmd = angle_P * angle_error + angle_I * integral_error + angle_D * derivative;
-  torque_cmd = constrain(torque_cmd, -motor.voltage_limit, motor.voltage_limit);
+// Debug in ra
+Serial.print("Angle_Err: ");
+Serial.println(angle_error, 4);
+
+
 
   motor.move(torque_cmd);
   command.run();
