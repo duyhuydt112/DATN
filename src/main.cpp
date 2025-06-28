@@ -8,7 +8,7 @@ BLDCDriver3PWM driver = BLDCDriver3PWM(TILT_IN1_PIN, TILT_IN2_PIN, TILT_IN3_PIN,
 MagneticSensorSPI sensor = MagneticSensorSPI(AS5048_SPI, TILT_CS_PIN);
 
 // INA240A2 → Gain = 50V/V, Shunt = 0.01Ω → đo 2 pha
-InlineCurrentSense current_sense = InlineCurrentSense(TILT_R_SHUNT, TILT_INA_GAIN, PAN_CURRENT_SENSOR_A0, PAN_CURRENT_SENSOR_A1);
+InlineCurrentSense current_sense = InlineCurrentSense(TILT_R_SHUNT, TILT_INA_GAIN, TILT_CURRENT_SENSOR_A0, TILT_CURRENT_SENSOR_A1);
 
 // ------------------- Biến điều khiển vị trí bằng torque -------------------
 float target_angle = 0.0;      // rad
@@ -101,7 +101,9 @@ if (angle_error != 0) {
 float raw_derivative = (angle_error - prev_error) / Dt;
 float derivative = 0.9 * derivative + 0.1 * raw_derivative;  // lọc đạo hàm
 prev_error = angle_error;
-
+angle_P = (abs(angle_error) > 0.1) ? 7.0 : 4.9;
+angle_I = (abs(angle_error) > 0.1) ? 0.7 : 0.7;
+angle_D = (abs(angle_error) > 0.1) ? 0.18 : 0.17;
 // 5. PID output
 float torque_cmd = angle_P * angle_error + angle_I * integral_error + angle_D * derivative;
 torque_cmd = constrain(torque_cmd, -motor.voltage_limit, motor.voltage_limit);
