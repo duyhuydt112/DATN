@@ -48,9 +48,9 @@ void setup(){
 
   // PID dòng Q (torque)
   motor.PID_current_q.P = 5.0;
-  motor.PID_current_q.I = 1.0;
+  motor.PID_current_q.I = 5.0;
   motor.PID_current_q.D = 0.000;
-  motor.LPF_current_q.Tf = 0.06;
+  motor.LPF_current_q.Tf = 0.07;
 
   // PID dòng D
   motor.PID_current_d.P = 5.0;
@@ -101,9 +101,9 @@ if (angle_error != 0) {
 float raw_derivative = (angle_error - prev_error) / Dt;
 float derivative = 0.9 * derivative + 0.1 * raw_derivative;  // lọc đạo hàm
 prev_error = angle_error;
-angle_P = (abs(angle_error) > 0.1) ? 7.0 : 4.9;
-angle_I = (abs(angle_error) > 0.1) ? 0.7 : 0.7;
-angle_D = (abs(angle_error) > 0.1) ? 0.18 : 0.17;
+angle_P = (abs(angle_error) > 0.1) ? 7.0 : 2.5;
+angle_I = (abs(angle_error) > 0.1) ? 0.7 : 0.2;
+angle_D = (abs(angle_error) > 0.1) ? 0.18 : 0.05;
 // 5. PID output
 float torque_cmd = angle_P * angle_error + angle_I * integral_error + angle_D * derivative;
 torque_cmd = constrain(torque_cmd, -motor.voltage_limit, motor.voltage_limit);
