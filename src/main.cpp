@@ -22,6 +22,7 @@ float angle_error = 0, prev_error = 0, integral_error = 0;
 float derivative = 0;  // giữ giá trị lọc đạo hàm giữa các vòng lặp
 const float Dt = 0.002;  // thời gian mẫu (2ms)
 
+
 // ------------------- Commander -------------------
 Commander command = Commander(Serial);
 void onAngle(char* buf){ 
@@ -48,13 +49,13 @@ void setup(){
   motor.controller = MotionControlType::torque;
 
   // PID dòng Q (torque)
-  motor.PID_current_q.P = 7.0;
+  motor.PID_current_q.P = 9.0;
   motor.PID_current_q.I = 7.0;
   motor.PID_current_q.D = 0.0;
   motor.LPF_current_q.Tf = 0.1;  // lọc tốt hơn
 
   // PID dòng D
-  motor.PID_current_d.P = 5.0;
+  motor.PID_current_d.P = 2.0;
   motor.PID_current_d.I = 1.0;
   motor.PID_current_d.D = 0.0;
   motor.LPF_current_d.Tf = 0.06;
@@ -75,11 +76,10 @@ void setup(){
   Serial.println("➡ Gõ A 90 để quay đến góc 90 độ");
 }
 
-void loop(){
+void loop() {
   motor.loopFOC();
 
   // ==== PID góc → torque ====
-  float deadzone = 0.015;  // rad ≈ 0.86 độ
 
   // 1. Tính sai số góc [-PI, PI]
   float angle_error = target_angle - motor.shaft_angle;
@@ -87,31 +87,21 @@ void loop(){
   if (angle_error < 0) angle_error += _2PI;
   angle_error -= _PI;
 
-  // 2. Deadzone - ngắt điều khiển nếu rất gần
-  if (abs(angle_error) < deadzone) {
-    torque_cmd = 0;
-    motor.move(torque_cmd);
-    command.run();
-    motor.monitor();
-    delay(1);
-    return;
-  }
-
-  // 3. Tích phân (nếu không trong deadzone)
+  // 2. Tích phân
   integral_error += angle_error * Dt;
   integral_error = constrain(integral_error, -0.5, 0.5);  // chống windup
 
-  // 4. Đạo hàm có lọc mạnh hơn
+  // 3. Đạo hàm có lọc mạnh hơn
   float raw_derivative = (angle_error - prev_error) / Dt;
   derivative = 0.95 * derivative + 0.05 * raw_derivative;
   prev_error = angle_error;
 
-  // 5. PID coefficients - tự động giảm khi gần đích
+  // 4. PID coefficients - tự động giảm khi gần đích
   angle_P = (abs(angle_error) > 0.05) ? 6.0 : 0.1;
   angle_I = (abs(angle_error) > 0.05) ? 0.6 : 0.03;
   angle_D = (abs(angle_error) > 0.05) ? 0.1 : 0.005;
 
-  // 6. PID output
+  // 5. PID output
   torque_cmd = angle_P * angle_error + angle_I * integral_error + angle_D * derivative;
   torque_cmd = constrain(torque_cmd, -motor.voltage_limit, motor.voltage_limit);
 
@@ -124,3 +114,4 @@ void loop(){
   motor.monitor();
   delay(1);
 }
+
