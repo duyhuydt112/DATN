@@ -1,22 +1,27 @@
-#ifndef BNO055_HPP
-#define BNO055_HPP
-
-#include <Wire.h>
-#include <Adafruit_Sensor.h>
+#ifndef BNO055_H
+#define BNO055_H
 #include <Adafruit_BNO055.h>
+#include <Wire.h>
+#include <utility/imumaths.h>
 
-/* Define Pin for BNO055 */
-#define BNO055_SCL_PIN 22
-#define BNO055_SDA_PIN 21
-
+#define SCL_PIN 22
+#define SDA_PIN 21
 extern Adafruit_BNO055 BNO055;
-std::array<float, 3> Get_BNO055_BasePoint();std::array<float, 3> Read_Angle_ThreeAxes_FromQuat(float &Pan, float &Tilt, float &Roll, std::array<float, 3> Base_Point);
+extern imu::Quaternion q_base;
+extern bool baseSet;
+
+struct KalmanFilter {
+  float est = 0;
+  float P = 1.0;
+  float Q = 0.01;
+  float R = 1.0;
+};
+
+extern KalmanFilter kalPan, kalTilt, kalRoll;
+
 void BNO055_Setup();
-float degtorad(float degree);
-float normalizeRoll(float roll_deg);
-float normalizePan(float pan_deg);
-void LimitedAngle(float &Pan, float &Tilt, float &Roll, float Threshold, float limitedPan, float limitedTilt, float limitedRoll);
-void PrintCalibrationStatus();
-void SetBaseForwardVector();
-//int GetPitchDirectionFromQuat();
+imu::Quaternion quatInverse(imu::Quaternion q);
+imu::Quaternion quatMultiply(imu::Quaternion q1, imu::Quaternion q2);
+std::array<float, 3> Read_PanTiltRoll();
+float kalmanUpdate(KalmanFilter &kf, float measurement);
 #endif
