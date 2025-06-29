@@ -15,10 +15,11 @@ float target_angle = 0.0;      // rad
 float torque_cmd = 0.0;
 
 // PID vị trí ngoài (angle → torque)
-float angle_P = 7.0;
-float angle_I = 0.7;
-float angle_D = 0.18;
+float angle_P = 6.0;
+float angle_I = 0.6;
+float angle_D = 0.1;
 float angle_error = 0, prev_error = 0, integral_error = 0;
+float derivative = 0;  // giữ giá trị lọc đạo hàm giữa các vòng lặp
 const float Dt = 0.002;  // thời gian mẫu (2ms)
 
 // ------------------- Commander -------------------
@@ -33,7 +34,7 @@ void setup(){
   sensor.init(); motor.linkSensor(&sensor);
 
   driver.voltage_power_supply = 12;
-  driver.voltage_limit = 6.0;
+  driver.voltage_limit = 4.5;  // Giảm để ổn định torque
   driver.pwm_frequency = 20000;
   driver.init(); motor.linkDriver(&driver);
 
@@ -47,10 +48,10 @@ void setup(){
   motor.controller = MotionControlType::torque;
 
   // PID dòng Q (torque)
-  motor.PID_current_q.P = 5.0;
-  motor.PID_current_q.I = 10.0;
-  motor.PID_current_q.D = 0.000;
-  motor.LPF_current_q.Tf = 0.15;
+  motor.PID_current_q.P = 7.0;
+  motor.PID_current_q.I = 7.0;
+  motor.PID_current_q.D = 0.0;
+  motor.LPF_current_q.Tf = 0.1;  // lọc tốt hơn
 
   // PID dòng D
   motor.PID_current_d.P = 5.0;
@@ -75,44 +76,48 @@ void setup(){
 }
 
 void loop(){
-motor.loopFOC();
+  motor.loopFOC();
 
-// ==== PID góc → torque ====
-float deadzone = 0.01;  // rad ≈ 0.57 độ
+  // ==== PID góc → torque ====
+  float deadzone = 0.015;  // rad ≈ 0.86 độ
 
-// 1. Tính sai số góc [-PI, PI]
-float angle_error = target_angle - motor.shaft_angle;
-angle_error = fmod(angle_error + _PI, _2PI);
-if (angle_error < 0) angle_error += _2PI;
-angle_error -= _PI;
+  // 1. Tính sai số góc [-PI, PI]
+  float angle_error = target_angle - motor.shaft_angle;
+  angle_error = fmod(angle_error + _PI, _2PI);
+  if (angle_error < 0) angle_error += _2PI;
+  angle_error -= _PI;
 
-// 2. Deadzone - bỏ qua lỗi nhỏ
-if (abs(angle_error) < deadzone) {
-  angle_error = 0;
-}
+  // 2. Deadzone - ngắt điều khiển nếu rất gần
+  if (abs(angle_error) < deadzone) {
+    torque_cmd = 0;
+    motor.move(torque_cmd);
+    command.run();
+    motor.monitor();
+    delay(1);
+    return;
+  }
 
-// 3. Tích phân (nếu không trong deadzone)
-if (angle_error != 0) {
+  // 3. Tích phân (nếu không trong deadzone)
   integral_error += angle_error * Dt;
-  integral_error = constrain(integral_error, -1.0, 1.0);  // chống windup
-}
+  integral_error = constrain(integral_error, -0.5, 0.5);  // chống windup
 
-// 4. Đạo hàm có lọc đơn giản
-float raw_derivative = (angle_error - prev_error) / Dt;
-float derivative = 0.9 * derivative + 0.1 * raw_derivative;  // lọc đạo hàm
-prev_error = angle_error;
-angle_P = (abs(angle_error) > 0.1) ? 7.0 : 0.3;
-angle_I = (abs(angle_error) > 0.1) ? 0.7 : 0.08;
-angle_D = (abs(angle_error) > 0.1) ? 0.18 : 0.05;
-// 5. PID output
-float torque_cmd = angle_P * angle_error + angle_I * integral_error + angle_D * derivative;
-torque_cmd = constrain(torque_cmd, -motor.voltage_limit, motor.voltage_limit);
+  // 4. Đạo hàm có lọc mạnh hơn
+  float raw_derivative = (angle_error - prev_error) / Dt;
+  derivative = 0.95 * derivative + 0.05 * raw_derivative;
+  prev_error = angle_error;
 
-// Debug in ra
-Serial.print("Angle_Err: ");
-Serial.println(angle_error, 4);
+  // 5. PID coefficients - tự động giảm khi gần đích
+  angle_P = (abs(angle_error) > 0.05) ? 6.0 : 0.1;
+  angle_I = (abs(angle_error) > 0.05) ? 0.6 : 0.03;
+  angle_D = (abs(angle_error) > 0.05) ? 0.1 : 0.005;
 
+  // 6. PID output
+  torque_cmd = angle_P * angle_error + angle_I * integral_error + angle_D * derivative;
+  torque_cmd = constrain(torque_cmd, -motor.voltage_limit, motor.voltage_limit);
 
+  // Debug in ra
+  Serial.print("Angle_Err: ");
+  Serial.println(angle_error, 4);
 
   motor.move(torque_cmd);
   command.run();
