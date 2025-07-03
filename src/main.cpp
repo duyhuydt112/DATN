@@ -1,176 +1,169 @@
-#include <SimpleFOC.h>
-#include <SPI.h>
+//--------------------------------------------------------------
+//  ESP‑NOW 2‑ESP SETUP · MOTOR SIDE (ESP2)
+//  -----------------------------------------------------------
+//  • ESP1  : BNO055 + quaternion (w,x,y,z) broadcast
+//  • ESP2  : receives quaternion → converts to pitch →
+//            1) open‑loop ramp motor to 90 °
+//            2) capture offset
+//            3) PID balance using IMU data (still no encoder)
+//
+//  Hardware (ESP2)
+//    • ESP32 DevKit v1
+//    • BLDC gimbal motor 11 pole‑pairs (GBM2804‑x)
+//    • DRV8313 / L6234 (UH‑VH‑WH) 3‑PWM driver
+//--------------------------------------------------------------
+
 #include <WiFi.h>
 #include <esp_now.h>
-#include <Motor_Control.h>
+#include <SimpleFOC.h>
 
-// ------------------- Dữ liệu từ ESP1 -------------------
-struct IMUData {
-  float yaw;
-  float pitch;
-  float roll;
+//--------------------------------------------------------------
+//  Motor pins & params
+//--------------------------------------------------------------
+constexpr int PIN_IN1 = 26;
+constexpr int PIN_IN2 = 22;
+constexpr int PIN_IN3 = 21;
+constexpr int PIN_EN = 25;
+constexpr uint8_t POLE_PAIRS = 11;
+
+BLDCMotor      motor(POLE_PAIRS);
+BLDCDriver3PWM driver(PIN_IN1, PIN_IN2, PIN_IN3, PIN_EN);
+
+//--------------------------------------------------------------
+//  ESP‑NOW quaternion packet
+//--------------------------------------------------------------
+struct __attribute__((packed)) QuatMsg {
+  float w, x, y, z;
 };
+volatile QuatMsg latestQuat = {1,0,0,0};
+volatile bool    quatValid  = false;
 
-IMUData imuData;
-float pitch = 0.0;
-float filtered_pitch = 0.0;
-const float alpha = 0.15;  // low-pass filter
-
-// ------------------- PID vị trí → torque -------------------
-float target_angle = 0.0;
-float torque_cmd = 0.0;
-float angle_error = 0, prev_error = 0, integral_error = 0;
-float derivative = 0;
-const float Dt = 0.002;
-
-// ------------------- PID giữ thăng bằng theo pitch -------------------
-float balance_target = 0.0;
-float balance_error = 0.0;
-float balance_integral = 0.0;
-float balance_derivative = 0.0;
-float balance_prev = 0.0;
-
-float Kp_balance = 7.0;
-float Ki_balance = 0.01;
-float Kd_balance = 2.0;
-
-// ------------------- PID vị trí ngoài -------------------
-float angle_P = 7.0;
-float angle_I = 0.3;
-float angle_D = 0.1;
-
-// ------------------- Trạng thái -------------------
-bool reached_target = false;
-bool enable_balance = false;
-float bno_offset = 0.0;
-
-// ------------------- Cấu hình phần cứng -------------------
-BLDCMotor motor = BLDCMotor(11);
-BLDCDriver3PWM driver = BLDCDriver3PWM(TILT_IN1_PIN, TILT_IN2_PIN, TILT_IN3_PIN, TILT_EN_PIN);
-MagneticSensorSPI sensor = MagneticSensorSPI(AS5048_SPI, TILT_CS_PIN);
-InlineCurrentSense current_sense = InlineCurrentSense(TILT_R_SHUNT, TILT_INA_GAIN, TILT_CURRENT_SENSOR_A0, TILT_CURRENT_SENSOR_A1);
-
-// ------------------- Commander -------------------
-Commander command = Commander(Serial);
-void onAngle(char* buf) {
-  target_angle = atof(buf) * _PI / 180.0;
-  reached_target = false;
-  enable_balance = false;
-  Serial.println("Quay tới góc đích...");
-}
-
-// ------------------- Nhận dữ liệu từ ESP1 -------------------
-void onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len) {
-  if (len == sizeof(IMUData)) {
-    memcpy(&imuData, incomingData, sizeof(IMUData));
-    pitch = (imuData.pitch - bno_offset) * _PI / 180.0;
-    filtered_pitch = alpha * pitch + (1 - alpha) * filtered_pitch;
+void onDataRecv(const uint8_t*, const uint8_t* data, int len) {
+  if (len == sizeof(QuatMsg)) {
+    memcpy((void*)&latestQuat, data, sizeof(QuatMsg));
+    quatValid = true;
   }
 }
 
-void setup() {
-  Serial.begin(115200);
+//--------------------------------------------------------------
+//  Quaternion → pitch (deg)
+//--------------------------------------------------------------
+float quatToPitchDeg(const QuatMsg& q) {
+  float sinp = 2.0f * (q.w * q.y - q.z * q.x);
+  if (fabsf(sinp) >= 1.0f) return copysignf(90.0f, sinp);
+  return asinf(sinp) * 180.0f / PI;
+}
 
-  // ESP-NOW
+//--------------------------------------------------------------
+//  Control constants
+//--------------------------------------------------------------
+const float INIT_MECH_DEG = 90.0f;                // pre‑rotate
+const float ELECT_PER_DEG = POLE_PAIRS * DEG_TO_RAD;
+const float TARGET_ELEC   = INIT_MECH_DEG * ELECT_PER_DEG;
+const float INIT_TIME_S   = 1.5f;                 // ramp duration
+
+// PID
+float Kp = 1.2f;
+float Ki = 0.0f;
+float Kd = 0.03f;
+float integral = 0.0f;
+float prevErr  = 0.0f;
+constexpr float LOOP_DT = 0.002f; // 500 Hz
+uint32_t tLast = 0;
+
+//--------------------------------------------------------------
+//  Runtime vars
+//--------------------------------------------------------------
+enum Mode : uint8_t { PREPOSITION, CAPTURE_ZERO, BALANCE };
+Mode        mode = PREPOSITION;
+uint32_t    tStart;
+float       offsetPitch = 0.0f;
+float       elecAngle   = 0.0f;
+
+//--------------------------------------------------------------
+void setupEspNow() {
   WiFi.mode(WIFI_STA);
   if (esp_now_init() != ESP_OK) {
-    Serial.println("ESP-NOW init failed!");
-    while (1);
+    Serial.println("[ERR] ESP‑NOW init failed");
+    while (true) delay(10);
   }
   esp_now_register_recv_cb(onDataRecv);
-  Serial.println("ESP-NOW sẵn sàng");
+  // Broadcast mode ⇒ no need to add peers.
+}
 
-  // SPI + Motor
-  SPI.begin(18, 23, 19);
-  sensor.init(); motor.linkSensor(&sensor);
+//--------------------------------------------------------------
+void setup() {
+  Serial.begin(115200);
+  Serial.println("\n=== ESP2 · Gimbal Motor (no encoder) ===\n");
 
-  driver.voltage_power_supply = 12;
-  driver.voltage_limit = 4.5;
-  driver.pwm_frequency = 20000;
-  driver.init(); motor.linkDriver(&driver);
+  setupEspNow();
 
-  if (!current_sense.init()) Serial.println("INA240 init FAILED!");
-  current_sense.linkDriver(&driver);
-  motor.linkCurrentSense(&current_sense);
-  current_sense.skip_align = true;
-  current_sense.gain_b *= -1;
+  // driver
+  driver.voltage_power_supply = 12.0f;
+  driver.voltage_limit        = 10.0f;    // more torque
+  driver.pwm_frequency        = 25000;
+  driver.init();
 
-  motor.controller = MotionControlType::torque;
-  motor.torque_controller = TorqueControlType::foc_current;
-
-  motor.PID_current_q.P = 9.0;
-  motor.PID_current_q.I = 7.0;
-  motor.LPF_current_q.Tf = 0.1;
-
-  motor.PID_current_d.P = 2.0;
-  motor.PID_current_d.I = 1.0;
-  motor.LPF_current_d.Tf = 0.06;
-
-  motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
-  motor.voltage_sensor_align = 3.0;
-
-  motor.monitor_variables = _MON_TARGET | _MON_CURR_Q | _MON_ANGLE | _MON_VEL;
-  motor.useMonitoring(Serial);
-  motor.monitor_downsample = 10;
-
+  // motor
+  motor.linkDriver(&driver);
+  motor.foc_modulation  = FOCModulationType::SinePWM;
+  motor.voltage_limit   = driver.voltage_limit;
+  motor.controller      = MotionControlType::angle_openloop;
   motor.init();
-  motor.initFOC();
 
-  command.add('A', onAngle, "target angle in degrees");
-  Serial.println("Gõ A 90 để quay tới 90 độ rồi giữ cân bằng.");
+  tStart = micros();
+  Serial.println("Waiting quaternion & pre‑rotate 90°...\n");
 }
 
+//--------------------------------------------------------------
 void loop() {
-  motor.loopFOC();
+  if (micros() - tLast < LOOP_DT * 1e6) return;
+  tLast = micros();
 
-  float current_angle = motor.shaft_angle;
+  if (!quatValid) return;   // no IMU data yet
 
-  // PID góc → torque
-  angle_error = target_angle - current_angle;
-  angle_error = fmod(angle_error + _PI, _2PI);
-  if (angle_error < 0) angle_error += _2PI;
-  angle_error -= _PI;
+  QuatMsg q; memcpy(&q, (void*)&latestQuat, sizeof(QuatMsg));
+  float pitchDeg = quatToPitchDeg(q);
 
-  integral_error += angle_error * Dt;
-  integral_error = constrain(integral_error, -0.5, 0.5);
+  switch (mode) {
+    //---------------- PRE‑ROTATE -----------------------------
+    case PREPOSITION: {
+      float prog = min((micros() - tStart) / 1e6f / INIT_TIME_S, 1.0f);
+      elecAngle = prog * TARGET_ELEC;               // no wrap
+      motor.move(elecAngle);
+      if (prog >= 1.0f) {
+        mode = CAPTURE_ZERO;
+        Serial.println("Reached 90°, capturing offset");
+      }
+      break;
+    }
 
-  float raw_derivative = (angle_error - prev_error) / Dt;
-  derivative = 0.95 * derivative + 0.05 * raw_derivative;
-  prev_error = angle_error;
+    //---------------- CAPTURE ZERO --------------------------
+    case CAPTURE_ZERO: {
+      offsetPitch = pitchDeg;
+      integral = prevErr = 0.0f;
+      mode = BALANCE;
+      Serial.print("Offset = "); Serial.print(offsetPitch, 2); Serial.println("°\nBalancing...");
+      break;
+    }
 
-  torque_cmd = angle_P * angle_error + angle_I * integral_error + angle_D * derivative;
-  torque_cmd = constrain(torque_cmd, -motor.voltage_limit, motor.voltage_limit);
+    //---------------- BALANCE -------------------------------
+    case BALANCE: {
+      float rel = pitchDeg - offsetPitch;
+      float err = -rel;
+      integral += err * LOOP_DT;
+      float d   = (err - prevErr) / LOOP_DT;
+      prevErr   = err;
+      float pid = Kp * err + Ki * integral + Kd * d; // deg
+      elecAngle += pid * ELECT_PER_DEG;
+      motor.move(elecAngle);
 
-  // Nếu đã đến góc đích → bật giữ thăng bằng
-  if (!reached_target && abs(angle_error) < 0.02) {
-    reached_target = true;
-    enable_balance = true;
-    bno_offset = imuData.pitch;
-    Serial.println("Đã đến đích. Bắt đầu giữ thăng bằng.");
+      static uint16_t div=0; if(++div>=25){div=0;
+        Serial.print("Rel ");Serial.print(rel,2);
+        Serial.print("° | Err ");Serial.print(err,2);
+        Serial.print(" | Elec(rad) ");Serial.println(elecAngle,3);}      
+      break;
+    }
   }
-
-  float balance_torque = 0;
-  if (enable_balance) {
-    balance_error = balance_target - filtered_pitch;
-    balance_integral += balance_error * Dt;
-    balance_integral = constrain(balance_integral, -0.5, 0.5);
-    balance_derivative = (balance_error - balance_prev) / Dt;
-    balance_prev = balance_error;
-
-    balance_torque = Kp_balance * balance_error + Ki_balance * balance_integral + Kd_balance * balance_derivative;
-  }
-
-  float total_torque = torque_cmd + balance_torque;
-  total_torque = constrain(total_torque, -motor.voltage_limit, motor.voltage_limit);
-
-  // Debug
-  Serial.print("Err: "); Serial.print(angle_error, 4);
-  Serial.print(" | Pitch: "); Serial.print(filtered_pitch, 4);
-  Serial.print(" | Raw pitch: "); Serial.print(imuData.pitch, 2);
-  Serial.print(" | Torque: "); Serial.println(total_torque, 4);
-
-  motor.move(total_torque);
-  command.run();
-  motor.monitor();
-  delay(1);
 }
+//--------------------------------------------------------------
