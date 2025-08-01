@@ -1,25 +1,22 @@
 /*********************************************************************
- * Angle‑openloop giữ vị trí – KHÔNG giật, KHÔNG nóng + PID có lọc D
+ * Angle-openloop giữ vị trí – chống rung nhạy nhanh
  *********************************************************************/
 #include <SimpleFOC.h>
 #include <Wire.h>
 #include <Adafruit_BNO055.h>
 
 constexpr uint8_t PIN_UH_3 = 15, PIN_VH_3 = 2, PIN_WH_3 = 0, PIN_EN_3 = 4;
-
 constexpr uint8_t POLE_PAIRS = 11;
+
 BLDCMotor       motor3 (POLE_PAIRS);
 BLDCDriver3PWM  driver3(PIN_UH_3, PIN_VH_3, PIN_WH_3, PIN_EN_3);
 
 constexpr float SUPPLY_V      = 12.0;
 constexpr float VOLT_HOLD_3   = 3.0;
-constexpr float VOLT_BOOST_3  = 5.0;
+constexpr float VOLT_BOOST_3  = 7.0;
 
 constexpr float LOOP_HZ       = 1000.0;
 constexpr float LOOP_DT       = 1.0 / LOOP_HZ;
-constexpr float RAMP_STEP     = 0.5;
-constexpr float DEAD_BAND     = 0.1f;
-constexpr float BOOST_TH      = 1.0;
 
 float integral      = 0.0f;
 float prevErr       = 0.0f;
@@ -27,7 +24,8 @@ float prevD         = 0.0f;
 float offsetPitch   = 0.0f;
 constexpr float ELECT_PER_DEG = POLE_PAIRS * DEG_TO_RAD;
 
-float target_req = 0, target_deg = 0;
+float target_req = 100.0;
+float target_deg = 0.0;
 
 enum Mode : uint8_t {PREPOSITION, CAPTURE_ZERO, BALANCE};
 Mode mode = PREPOSITION;
@@ -35,11 +33,19 @@ Mode mode = PREPOSITION;
 float deg2Rad(float d){ return d * DEG_TO_RAD; }
 
 // PID
-float Kp = 1.0f;
-float Ki = 0.00f;
-float Kd = 0.08f;
+float Kp = 0.2f;
+float Ki = 1.0f;
+float Kd = 0.5f;
+float integral_limit = 50.0f;
 
-float integral_limit = 50.0f; // giới hạn tích phân
+// Deadband và Hysteresis
+constexpr float DEAD_BAND = 0.5f;
+constexpr float HYSTERESIS = 0.2f;
+
+// Giữ torque khi giữ yên đủ lâu
+unsigned long stableStart = 0;
+bool isStable = false;
+constexpr uint16_t STABLE_TIME_MS = 500;
 
 // BNO055
 Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28);
@@ -68,81 +74,105 @@ void setup() {
 }
 
 void loop() {
-  sensors_event_t orientationData;
-  bno.getEvent(&orientationData, Adafruit_BNO055::VECTOR_EULER);
-
-  // ⚠️ Dùng orientation.y nếu bạn muốn điều khiển theo Pitch
-  float pitchDeg = orientationData.orientation.z;
+  // ======= LẤY GÓC BNO055 =======
+  imu::Vector<3> e = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+  float yawDeg = e.x();
 
   switch (mode) {
     case PREPOSITION: {
-      float err  = target_req - target_deg;
-      float step = (fabs(err) > RAMP_STEP) ? RAMP_STEP * ((err > 0) ? 1 : -1) : err;
-      target_deg += step;
-
-      float vlim_3 = (fabs(err) > BOOST_TH) ? VOLT_BOOST_3 : VOLT_HOLD_3;
-      motor3.voltage_limit  = vlim_3;
-      driver3.voltage_limit = vlim_3;
-
-      if (fabs(err) < DEAD_BAND) {
-        motor3.setPhaseVoltage(0, 0, 0);
-        Serial.println("DEAD BAND -----------------------------------------");
-      } else {
-        motor3.move(deg2Rad(target_deg));
-        Serial.println("OUT OF DEAD BAND -----------------------------------------");
-      }
-
-      if (target_deg >= 100.0f) {
-        mode = CAPTURE_ZERO;
-        Serial.println("Reached 100°, capturing offset");
-      }
+      motor3.move(0);
+      mode = CAPTURE_ZERO;
       break;
     }
 
     case CAPTURE_ZERO: {
-      offsetPitch = pitchDeg;
+      offsetPitch = yawDeg;
       integral = prevErr = prevD = 0.0f;
+      stableStart = millis();
       mode = BALANCE;
       Serial.printf("Offset = %.2f° | Start BALANCE\n", offsetPitch);
       break;
     }
 
     case BALANCE: {
-      float deadband_thresh = 0.1f; // vùng chết ±0.5 độ
-      float rel = pitchDeg - offsetPitch;
+      float rel = yawDeg - offsetPitch;
       float err = -rel;
 
-      // Deadband: nếu sai số nhỏ hơn ngưỡng, bỏ qua
-      if (fabs(err) < deadband_thresh) {
-          err = 0.0f;
+      static bool shouldReturn = false;
+      static unsigned long returnTimer = 0;
+
+      if (fabs(rel) > 5.0f) {
+        if (!shouldReturn) {
+          shouldReturn = true;
+          returnTimer = millis();
+          Serial.println("⏳ Lệch khỏi góc ban đầu >5°, bắt đầu đếm thời gian...");
+        }
       }
 
-      // PID - tích phân (anti-windup)
-      integral += err * LOOP_DT;
+      if (shouldReturn) {
+        if (fabs(rel) > 5.0f) {
+          returnTimer = millis();
+        } else if (millis() - returnTimer > 5000) {
+          target_deg = offsetPitch;
+          offsetPitch = yawDeg;
+          shouldReturn = false;
+          Serial.println("🔁 Quay về góc đã ghi nhận tại CAPTURE_ZERO");
+        }
+      }
+
+      float rel2 = yawDeg - offsetPitch;
+      if (rel2 > 180.0f) rel2 -= 360.0f;
+      if (rel2 < -180.0f) rel2 += 360.0f;
+      float err2 = -rel2;
+
+      static bool insideDeadZone = false;
+      if (fabs(err2) < (DEAD_BAND - HYSTERESIS)) {
+        err2 = 0.0f;
+        insideDeadZone = true;
+      } else if (fabs(err2) > (DEAD_BAND + HYSTERESIS)) {
+        insideDeadZone = false;
+      } else if (insideDeadZone) {
+        err2 = 0.0f;
+      }
+
+      if (fabs(rel2) < 0.3f) {
+        if (!isStable && (millis() - stableStart > STABLE_TIME_MS)) {
+          isStable = true;
+          Serial.println("🟢 Gimbal stabilized.");
+        }
+      } else {
+        stableStart = millis();
+        isStable = false;
+      }
+
+      if (isStable) {
+        motor3.setPhaseVoltage(0, 0, 0);
+        return;
+      }
+
+      if (fabs(err2) < 0.1f) integral = 0;
+      integral += err2 * LOOP_DT;
       integral = constrain(integral, -integral_limit, integral_limit);
-
-      // PID - đạo hàm có lọc nhiễu
-      float dRaw = (err - prevErr) / LOOP_DT;
-      float dFiltered = 0.9f * prevD + 0.05f * dRaw;
+      float dRaw = (err2 - prevErr) / LOOP_DT;
+      float dFiltered = 0.5f * prevD + 0.05f * dRaw;
       prevD = dFiltered;
-      prevErr = err;
+      prevErr = err2;
+      float pid = Kp * err2 + Ki * integral + Kd * dFiltered;
+      pid = constrain(pid, -4.5f, 4.5f);
 
-      // Tính PID
-      float pid = Kp * err + Ki * integral + Kd * dFiltered;
-      pid = constrain(pid, -5.0f, 5.0f);
+      // Bỏ giới hạn slope để đáp ứng nhanh
+      if (fabs(err2) < 11.0f) {
+        pid = roundf(pid * 10.0f) / 10.0f;
+        //pid = roundf(pid);
+      }
 
-      // Điều khiển điện tử
-      float elecAngle = deg2Rad(target_deg) + (pid * ELECT_PER_DEG);
-      elecAngle = constrain(elecAngle, 0, 2*PI);  // hoặc -PI..PI nếu cần
-      motor3.move(elecAngle);
+      motor3.move(pid);
 
-      // Debug in ra serial
-      Serial.printf("Pitch: %.2f | Err: %.2f | P: %.2f | I: %.2f | D: %.2f | PID: %.2f | Elec: %.2f\n",
-        pitchDeg, err, Kp*err, Ki*integral, Kd*dFiltered, pid, elecAngle);
+      Serial.printf("%.2f,%.2f,%.2f,%.2f\n", rel, err2, pid, yawDeg);
       break;
     }
   }
 
   motor3.loopFOC();
-  delayMicroseconds(2000); // tăng tần số vòng lặp lên 500 Hz
+  delay(1); // Tăng tốc phản hồi
 }
