@@ -1,69 +1,73 @@
 import serial
 import matplotlib.pyplot as plt
-import time
+from collections import deque
 
-# 🛠️ Thay cổng COM dưới đây bằng cổng của ESP32 bạn
-PORT = 'COM9'          # ⚠️ THAY BẰNG COM CỦA BẠN
+# ⚠️ Cập nhật đúng cổng COM trên máy của bạn
+PORT = 'COM9'       # ← Đổi đúng port Serial (VD: COM3, COM4, v.v.)
 BAUD = 115200
 
-# Kết nối serial
-ser = serial.Serial(PORT, BAUD, timeout=1)
-time.sleep(2)  # Đợi ESP32 khởi động
+# Thử kết nối Serial
+try:
+    ser = serial.Serial(PORT, BAUD, timeout=1)
+    print(f"✅ Đã kết nối {PORT} @ {BAUD}")
+except:
+    print(f"❌ Không mở được cổng {PORT}")
+    exit(1)
 
-# Các danh sách lưu dữ liệu
-x_vals = []
-err_vals = []
-pid_vals = []
-pitch_vals = []
+# Cấu hình vùng đệm (số điểm hiển thị)
+MAX_POINTS = 200
+pid_data  = deque(maxlen=MAX_POINTS)
+err_data = deque(maxlen=MAX_POINTS)
+yaw_data = deque(maxlen=MAX_POINTS)
 
-plt.ion()  # Bật chế độ tương tác
+# Cấu hình biểu đồ
+plt.ion()
 fig, ax = plt.subplots()
+line_pid,  = ax.plot([], [], label='PID output', color='blue')
+line_err, = ax.plot([], [], label='Error (err2)', color='red')
+line_yaw,  = ax.plot([], [], label='Yaw (deg)', color='green')
 
-print("⏳ Đang nhận dữ liệu từ ESP32... Nhấn Ctrl+C để dừng.")
+ax.set_xlim(0, MAX_POINTS)
+ax.set_ylim(-100, 100)  # ← Chỉnh giới hạn trục y nếu cần
+ax.set_title("Biểu đồ phản ứng PID theo thời gian thực")
+ax.set_xlabel("Thời gian (tick)")
+ax.set_ylabel("Giá trị")
+ax.legend(loc='upper right')
+plt.grid(True)
 
 while True:
     try:
-        line = ser.readline().decode('utf-8').strip()
+        line = ser.readline().decode('utf-8', errors='ignore').strip()
         if not line:
             continue
 
-        # Tách dữ liệu theo dấu phẩy
-        parts = line.split(",")
-        if len(parts) < 3:
+        parts = line.split(',')
+        if len(parts) != 4:
             continue
 
-        # Chuyển sang float
-        err = float(parts[0])
-        pid = float(parts[1])
-        pitch = float(parts[2])
+        # Parse dữ liệu
+        rel, err, pid, yaw = map(float, parts)
 
-        # Cập nhật dữ liệu
-        x_vals.append(len(x_vals))
-        err_vals.append(err)
-        pid_vals.append(pid)
-        pitch_vals.append(pitch)
+        # Lưu vào vùng đệm
+        pid_data.append(pid)
+        err_data.append(err)
+        yaw_data.append(yaw)
 
-        # Giới hạn độ dài dữ liệu
-        if len(x_vals) > 200:
-            x_vals.pop(0)
-            err_vals.pop(0)
-            pid_vals.pop(0)
-            pitch_vals.pop(0)
+        # Cập nhật dữ liệu vẽ
+        x = list(range(len(pid_data)))
+        line_pid.set_data(x, pid_data)
+        line_err.set_data(x, err_data)
+        line_yaw.set_data(x, yaw_data)
 
-        # Cập nhật biểu đồ
-        ax.clear()
-        ax.plot(x_vals, err_vals, label="Error")
-        ax.plot(x_vals, pid_vals, label="PID Output")
-        ax.plot(x_vals, pitch_vals, label="Pitch (deg)")
-        ax.set_title("PID Gimbal Visualization")
-        ax.set_xlabel("Time (samples)")
-        ax.set_ylabel("Values")
-        ax.legend()
-        ax.grid(True)
+        ax.set_xlim(0, MAX_POINTS)
+        ax.relim()
+        ax.autoscale_view(True, True, True)
+
         plt.pause(0.01)
 
     except KeyboardInterrupt:
-        print("\n🛑 Dừng nhận dữ liệu.")
+        print("\n🛑 Dừng vẽ.")
         break
 
-ser.close()
+    except Exception as e:
+        print("Lỗi:", e)
